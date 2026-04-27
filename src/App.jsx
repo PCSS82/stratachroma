@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, memo } from "react";
+import { useState, useRef, useCallback, useEffect, memo } from "react";
 import { analyzeImage } from "./motor.js";
 import { enrichLayer } from "./colors.js";
-import { saveCala, listFolders, listFiles, readJSON, readImageAsDataURL, trashItem, ROOT_FOLDER_ID, getToken } from "./drive.js";
+import { saveCala, listFolders, listFiles, readJSON, readImageAsDataURL, trashItem, ROOT_FOLDER_ID, getToken, signOut } from "./drive.js";
 
 // ─── GPS ──────────────────────────────────────────────────────────────────────
 function getGPS() {
@@ -21,51 +21,75 @@ function getGPS() {
 }
 
 // ─── PDF ──────────────────────────────────────────────────────────────────────
-function openPDF(proj, code, date, layers, imgUrl, meta, gps) {
-  const pw = window.open("", "_blank");
-  if (!pw) { alert("Permite pop-ups para imprimir PDF"); return; }
+// Genera HTML del PDF y lo abre. En iOS usa history.back() para volver.
+function buildPDFHtml(proj, code, date, layers, imgUrl, meta, gps) {
   const now = new Date().toLocaleString("es");
-  pw.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>SC·${proj}·${code}</title><style>
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Courier New',monospace;padding:14px;font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const closeAction = isIOS ? "history.back()" : "window.close()";
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SC·${proj}·${code}</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;padding:14px;font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.topbar{position:fixed;top:0;left:0;right:0;background:#111;padding:10px 16px;display:flex;gap:10px;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.topbar button{font-family:monospace;font-size:12px;padding:8px 18px;border:none;border-radius:3px;cursor:pointer;font-weight:700}
+.btn-print{background:#c8a96e;color:#111}
+.btn-close{background:#555;color:#fff}
+.content{margin-top:52px}
 .hdr{display:flex;justify-content:space-between;border-bottom:2.5px solid #111;padding-bottom:10px;margin-bottom:10px}
 .brand{font-size:20px;font-weight:300}.brand b{color:#8B6914}.info{text-align:right;font-size:7px;line-height:2;color:#555}
-.mbox{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:8px;padding:6px 8px;background:#f9f7f2;border:1px solid #e8e0d0}
-.mt{color:#aaa;text-transform:uppercase;letter-spacing:.07em;font-size:5.5px;margin-bottom:1px}.mv{color:#333;font-weight:700}
+.mbox{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:8px;padding:6px 8px;background:#f9f7f2;border:1px solid #e8e0d0}
+.mt{color:#aaa;text-transform:uppercase;letter-spacing:.07em;font-size:5.5px;margin-bottom:1px}.mv{color:#333;font-weight:700;font-size:7px}
 .gps{grid-column:1/-1;background:#eef2ff;padding:4px 6px;font-size:6.5px;color:#224}
 .strip{display:flex;height:20px;overflow:hidden;border:1px solid #ddd;margin-bottom:8px}.strip div{flex:1}
-.body{display:grid;grid-template-columns:${imgUrl ? "125px 1fr" : "1fr"};gap:10px}
+.body{display:grid;grid-template-columns:${imgUrl ? "110px 1fr" : "1fr"};gap:10px}
 img.foto{width:100%;border:1px solid #ddd;object-fit:contain}
 table{width:100%;border-collapse:collapse;font-size:7px}
 th{background:#111;color:#fff;padding:3.5px 5px;text-align:left;font-size:6px;white-space:nowrap}
 td{padding:3px 5px;border-bottom:1px solid #f0ece4;vertical-align:middle}
 tr:nth-child(even) td{background:#faf8f4}
-.sw{display:inline-block;width:26px;height:26px;border-radius:2px;border:1px solid rgba(0,0,0,.12);vertical-align:middle}
-.lnum{font-weight:900;color:#8B6914;font-size:11px}.hex{color:#8B6914;font-weight:700}.ncs{color:#003880}.amer{color:#0044aa;font-size:6.5px}
+.sw{display:inline-block;width:22px;height:22px;border-radius:2px;border:1px solid rgba(0,0,0,.12);vertical-align:middle}
+.lnum{font-weight:900;color:#8B6914;font-size:10px}.hex{color:#8B6914;font-weight:700}.ncs{color:#003880}.amer{color:#0044aa;font-size:6px}
 .footer{margin-top:8px;padding-top:5px;border-top:1px solid #eee;font-size:5.5px;color:#ccc;display:flex;justify-content:space-between}
-@media print{@page{margin:7mm;size:A4}body{padding:0}}
+@media print{.topbar{display:none}.content{margin-top:0}@page{margin:7mm;size:A4}}
 </style></head><body>
-<div class="hdr"><div><div class="brand">STRATA<b>CHROMA</b></div><div style="font-size:6px;color:#aaa">FICHA TÉCNICA · CALA ESTRATIGRÁFICA · v18 · MC 1M P50 CIE-LAB</div></div>
-<div class="info">Proyecto: <b>${proj}</b><br>Código: <b style="color:#8B6914">${code}</b><br>${date} · ${layers.length} capas<br>${now}</div></div>
+<div class="topbar">
+  <button class="btn-print" onclick="window.print()">🖨 Imprimir / PDF</button>
+  <button class="btn-close" onclick="${closeAction}">← Volver a la app</button>
+</div>
+<div class="content">
+<div class="hdr">
+  <div><div class="brand">STRATA<b>CHROMA</b></div><div style="font-size:6px;color:#aaa">FICHA TÉCNICA · CALA ESTRATIGRÁFICA · v18</div></div>
+  <div class="info">Proyecto: <b>${proj}</b><br>Código: <b style="color:#8B6914">${code}</b><br>${date} · ${layers.length} capas<br>${now}</div>
+</div>
 <div class="mbox">
-<div><div class="mt">Resolución</div><div class="mv">${meta?.size || "—"}</div></div>
-<div><div class="mt">Fecha foto</div><div class="mv">${meta?.datetime || "—"}</div></div>
-<div><div class="mt">Dispositivo</div><div class="mv">${meta?.device || "—"}</div></div>
-<div><div class="mt">Archivo</div><div class="mv">${meta?.filename || "—"}</div></div>
-<div class="gps">📍 Lat: <b>${gps?.lat || "N/A"}</b> &nbsp; Lon: <b>${gps?.lon || "N/A"}</b> &nbsp; Alt: <b>${gps?.alt || "N/A"}</b> &nbsp; Precisión: <b>${gps?.acc || "N/A"}</b></div>
+  <div><div class="mt">Resolución</div><div class="mv">${meta?.size || "—"}</div></div>
+  <div><div class="mt">Fecha foto</div><div class="mv">${meta?.datetime || "—"}</div></div>
+  <div><div class="mt">Dispositivo</div><div class="mv">${meta?.device || "—"}</div></div>
+  <div class="gps">📍 Lat: <b>${gps?.lat || "N/A"}</b> &nbsp; Lon: <b>${gps?.lon || "N/A"}</b> &nbsp; Alt: <b>${gps?.alt || "N/A"}</b> &nbsp; Precisión: <b>${gps?.acc || "N/A"}</b></div>
 </div>
 <div class="strip">${layers.map(l => `<div style="background:${l.hex}"></div>`).join("")}</div>
 <div class="body">
 ${imgUrl ? `<div><img class="foto" src="${imgUrl}" alt="Cala"/></div>` : ""}
-<div><table><tr><th>#</th><th>Muestra</th><th>Nombre</th><th>HEX</th><th>NCS Colour</th><th>RAL (ΔE)</th><th>American Colors</th><th>RGB</th></tr>
+<div><table>
+<tr><th>#</th><th>Muestra</th><th>Nombre</th><th>HEX</th><th>NCS</th><th>RAL</th><th>American Colors</th><th>RGB</th></tr>
 ${layers.map(l => {
-  const lum = (l.rgb.r * 299 + l.rgb.g * 587 + l.rgb.b * 114) / 1000, fg = lum > 140 ? "#111" : "#fff";
-  return `<tr><td class="lnum">${l.pos}</td><td><div class="sw" style="background:${l.hex};display:flex;align-items:center;justify-content:center"><span style="color:${fg};font-size:5px;font-family:monospace;font-weight:700">${l.hex}</span></div></td><td style="font-weight:600;white-space:nowrap">${l.name}</td><td class="hex">${l.hex}</td><td class="ncs">${l.ncs}</td><td style="white-space:nowrap">${l.ral} <span style="color:#bbb;font-size:5.5px">ΔE${l.ralDE}</span></td><td class="amer">${l.american}</td><td style="font-size:6.5px">${l.rgb.r},${l.rgb.g},${l.rgb.b}</td></tr>`;
+  const rgb = l.rgb || { r: 128, g: 128, b: 128 };
+  const lum = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000, fg = lum > 140 ? "#111" : "#fff";
+  return `<tr><td class="lnum">${l.pos || l.numero}</td><td><div class="sw" style="background:${l.hex};display:flex;align-items:center;justify-content:center"><span style="color:${fg};font-size:4.5px;font-family:monospace;font-weight:700">${l.hex}</span></div></td><td style="font-weight:600;white-space:nowrap">${l.name || l.nombre}</td><td class="hex">${l.hex}</td><td class="ncs">${l.ncs}</td><td style="font-size:6.5px;white-space:nowrap">${l.ral} <span style="color:#bbb;font-size:5px">ΔE${l.ralDE || l.ral_dE || ""}</span></td><td class="amer">${l.american || l.american_colors}</td><td style="font-size:6px">${rgb.r},${rgb.g},${rgb.b}</td></tr>`;
 }).join("")}
-</table></div></div>
+</table></div>
+</div>
 <div class="footer"><span>STRATACHROMA v18 · MC 1M P50 CIE-LAB · NCS · RAL · HEX · American Colors</span><span>${now}</span></div>
-<script>window.onload=()=>setTimeout(()=>window.print(),500);</script>
-</body></html>`);
-  pw.document.close();
+</div>
+</body></html>`;
+}
+
+function openPDF(proj, code, date, layers, imgUrl, meta, gps) {
+  const html = buildPDFHtml(proj, code, date, layers, imgUrl, meta, gps);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
 }
 
 // ─── ESTILOS ──────────────────────────────────────────────────────────────────
@@ -149,15 +173,52 @@ export default function App() {
   const home = () => { setScr("home"); reset(); };
   const copyVal = v => { navigator.clipboard?.writeText(v); setCopied(v); setTimeout(() => setCopied(null), 1500); };
 
-  // Conectar Google Drive (muestra popup Google solo la primera vez)
+  // Al montar: GPS automático + reconectar Drive si hay token guardado
+  useEffect(() => {
+    // GPS automático al abrir
+    if (navigator.geolocation) {
+      setGpsStatus("Obteniendo GPS…");
+      navigator.geolocation.getCurrentPosition(
+        p => {
+          const pos = {
+            lat: p.coords.latitude.toFixed(6),
+            lon: p.coords.longitude.toFixed(6),
+            alt: p.coords.altitude ? p.coords.altitude.toFixed(1) + "m" : "N/A",
+            acc: p.coords.accuracy ? p.coords.accuracy.toFixed(0) + "m" : "N/A",
+          };
+          setGps(pos);
+          setGpsStatus(`📍 ${pos.lat}, ${pos.lon}`);
+        },
+        () => setGpsStatus("GPS: permite acceso"),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+    // Reconectar Drive silencioso si hay token en localStorage
+    const savedToken = localStorage.getItem("sc_gtoken");
+    const savedExpiry = parseInt(localStorage.getItem("sc_gexpiry") || "0");
+    if (savedToken && Date.now() < savedExpiry) {
+      setDriveReady(true);
+    } else {
+      // Intentar reconexión silenciosa con GIS (sin popup)
+      const tryReconnect = async () => {
+        try {
+          await getToken();
+          setDriveReady(true);
+        } catch { /* silencioso — usuario conecta manualmente si necesita */ }
+      };
+      // Esperar a que GIS cargue
+      setTimeout(tryReconnect, 1500);
+    }
+  }, []);
+
+  // Conectar Google Drive manualmente (muestra popup Google)
   const connectDrive = async () => {
     try {
-      setGpsStatus("Conectando a Google…");
+      setDriveReady(false);
       await getToken();
       setDriveReady(true);
-      setGpsStatus("✓ Google Drive conectado");
     } catch (e) {
-      setGpsStatus("Error: " + e.message.slice(0, 60));
+      alert("Error conectando Drive: " + e.message.slice(0, 80));
     }
   };
 
@@ -277,6 +338,12 @@ export default function App() {
   if (scr === "home") return (
     <Wrap>
       <div style={{ padding: "36px 24px", maxWidth: 460 }}>
+        {/* GPS status en home */}
+        {gpsStatus && (
+          <div style={{ fontSize: 8, color: gps ? "#60b060" : "#666", fontFamily: "monospace", marginBottom: 16, padding: "6px 10px", background: "rgba(0,80,40,.06)", borderRadius: 3 }}>
+            {gps ? `📍 ${gps.lat}, ${gps.lon} · Alt:${gps.alt}` : `⏳ ${gpsStatus}`}
+          </div>
+        )}
         <div style={{ fontSize: 10, color: "#252320", lineHeight: 3.2, fontFamily: "monospace", marginBottom: 36 }}>
           Análisis estratigráfico de calas de pintura<br />
           <span style={{ color: G, fontSize: 9 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS altimetría</span><br />
@@ -286,15 +353,14 @@ export default function App() {
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
           <button style={{ ...B(true), padding: "16px 24px", fontSize: 12 }} onClick={() => setScr("meta")}>+ Nueva Cala</button>
           <button style={{ ...B(false), padding: "14px 24px", fontSize: 11 }} onClick={() => { setScr("exps"); loadExps(); }}>📁 Expedientes Drive</button>
-          {!driveReady && (
-            <button style={{ ...B(false), padding: "12px 24px", fontSize: 10, borderColor: "rgba(100,160,100,.3)", color: "#60b060" }} onClick={connectDrive}>
-              🔗 Conectar Google Drive
-            </button>
-          )}
-          {driveReady && <div style={{ fontSize: 9, color: "#60b060", fontFamily: "monospace", padding: "8px 0" }}>✓ Google Drive conectado</div>}
-        </div>
-        <div style={{ marginTop: 48, fontSize: 7, color: "#181714", fontFamily: "monospace", lineHeight: 2.2 }}>
-          Drive root: {ROOT_FOLDER_ID}
+          {/* Mostrar estado Drive — solo botón de reconectar si falla */}
+          <div style={{ fontSize: 8, fontFamily: "monospace", padding: "6px 0", color: driveReady ? "#60b060" : "#666" }}>
+            {driveReady ? "✓ Google Drive conectado" : (
+              <button style={{ ...B(false), padding: "10px 20px", fontSize: 10, borderColor: "rgba(100,160,100,.3)", color: "#60b060" }} onClick={connectDrive}>
+                🔗 Conectar Google Drive
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </Wrap>
@@ -337,10 +403,14 @@ export default function App() {
         <div style={{ fontSize: 10, color: "#444", fontFamily: "monospace", marginBottom: 16 }}>
           <span style={{ color: G }}>{projRef.current || projD}</span> / {codeRef.current || codeD}
         </div>
-        {/* GPS */}
+        {/* GPS — muestra automático si ya está, botón para actualizar */}
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
-          <button style={{ ...B(false, true), flexShrink: 0 }} onClick={fetchGPS}>📍 GPS</button>
-          {gpsStatus && <span style={{ fontSize: 9, color: gps ? "#60b060" : "#666", fontFamily: "monospace", lineHeight: 1.5 }}>{gpsStatus}</span>}
+          <button style={{ ...B(gps ? true : false, true), flexShrink: 0 }} onClick={fetchGPS}>
+            {gps ? "📍 GPS ✓" : "📍 GPS"}
+          </button>
+          <span style={{ fontSize: 9, color: gps ? "#60b060" : "#666", fontFamily: "monospace", lineHeight: 1.5 }}>
+            {gps ? `${gps.lat}, ${gps.lon} · Alt:${gps.alt}` : gpsStatus || "Actualizando…"}
+          </span>
         </div>
         {/* Foto */}
         <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
