@@ -206,3 +206,51 @@ export async function saveCala(proj, code, date, layers, imgBase64, imgMeta, gps
 
   return { projId, calaId };
 }
+
+// ── EXPEDIENTES — navegar, leer, eliminar ──────────────────────────────────────
+
+// Listar archivos (no carpetas) dentro de una carpeta
+export async function listFiles(parentId) {
+  const res = await driveGET(
+    "/files",
+    `q='${parentId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name,mimeType,createdTime,size)&orderBy=createdTime desc&pageSize=50`
+  );
+  return res.files || [];
+}
+
+// Leer contenido de un archivo JSON de Drive
+export async function readJSON(fileId) {
+  const token = await getToken();
+  const r = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) throw new Error(`Read ${r.status}`);
+  return r.json();
+}
+
+// Leer imagen como data URL
+export async function readImageAsDataURL(fileId) {
+  const token = await getToken();
+  const r = await fetch(`${DRIVE_API}/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) throw new Error(`Read img ${r.status}`);
+  const blob = await r.blob();
+  return new Promise(res => {
+    const reader = new FileReader();
+    reader.onload = e => res(e.target.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Eliminar archivo o carpeta (manda a papelera)
+export async function trashItem(fileId) {
+  const token = await getToken();
+  const r = await fetch(`${DRIVE_API}/files/${fileId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ trashed: true }),
+  });
+  if (!r.ok) throw new Error(`Trash ${r.status}`);
+  return r.json();
+}
