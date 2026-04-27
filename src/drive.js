@@ -7,7 +7,7 @@
 // ⚠️  REEMPLAZA CON TU CLIENT ID DE GOOGLE CLOUD CONSOLE
 // Instrucciones en README.md
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "TU_CLIENT_ID_AQUI.apps.googleusercontent.com";
-export const ROOT_FOLDER_ID = import.meta.env.VITE_DRIVE_ROOT || "1DHDkWIlGKwPMJ6AcjhcwjNerQh8QPOnb";
+export const ROOT_FOLDER_ID = import.meta.env.VITE_DRIVE_ROOT || "14Bzwygyan_xGjtDLsaorvXw5G7Cf_bQz";
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3";
@@ -16,6 +16,30 @@ const SCOPE = "https://www.googleapis.com/auth/drive.file";
 let tokenClient = null;
 let accessToken = null;
 let tokenExpiry = 0;
+
+const LS_TOKEN = "sc_gtoken";
+const LS_EXPIRY = "sc_gexpiry";
+
+// Cargar token guardado en localStorage al iniciar
+function loadSavedToken() {
+  try {
+    const t = localStorage.getItem(LS_TOKEN);
+    const e = parseInt(localStorage.getItem(LS_EXPIRY) || "0");
+    if (t && Date.now() < e) { accessToken = t; tokenExpiry = e; }
+  } catch {}
+}
+
+// Guardar token en localStorage (persiste entre sesiones)
+function saveToken(token, expiresIn) {
+  accessToken = token;
+  tokenExpiry = Date.now() + (expiresIn - 60) * 1000;
+  try {
+    localStorage.setItem(LS_TOKEN, token);
+    localStorage.setItem(LS_EXPIRY, String(tokenExpiry));
+  } catch {}
+}
+
+loadSavedToken(); // ejecutar al cargar el módulo
 
 // Inicializar GIS token client
 function initTokenClient() {
@@ -26,35 +50,47 @@ function initTokenClient() {
   tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: SCOPE,
-    callback: () => {}, // se sobreescribe en getToken()
+    callback: () => {},
   });
 }
 
-// Obtener token (muestra popup Google si expiró)
+// Obtener token — silencioso si ya está guardado, popup solo la primera vez por sesión
 export function getToken() {
   return new Promise((resolve, reject) => {
+    // Token válido en memoria o localStorage → sin popup
     if (accessToken && Date.now() < tokenExpiry) {
       resolve(accessToken);
       return;
     }
-    try {
-      initTokenClient();
-    } catch (e) {
-      reject(e);
-      return;
-    }
+    try { initTokenClient(); } catch (e) { reject(e); return; }
     tokenClient.callback = (resp) => {
       if (resp.error) {
-        reject(new Error("Auth Google: " + resp.error));
+        // Si falla renovación silenciosa, intentar con popup
+        if (resp.error === "interaction_required" || resp.error === "consent_required") {
+          tokenClient.callback = (resp2) => {
+            if (resp2.error) { reject(new Error("Auth Google: " + resp2.error)); return; }
+            saveToken(resp2.access_token, resp2.expires_in);
+            resolve(resp2.access_token);
+          };
+          tokenClient.requestAccessToken({ prompt: "consent" });
+        } else {
+          reject(new Error("Auth Google: " + resp.error));
+        }
         return;
       }
-      accessToken = resp.access_token;
-      tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
-      resolve(accessToken);
+      saveToken(resp.access_token, resp.expires_in);
+      resolve(resp.access_token);
     };
-    // prompt="" intenta token silencioso primero, "" = solo si es necesario
+    // prompt="" = intenta renovar sin popup (usa cookie de sesión Google)
     tokenClient.requestAccessToken({ prompt: "" });
   });
+}
+
+// Cerrar sesión (para botón de logout si se necesita)
+export function signOut() {
+  try { localStorage.removeItem(LS_TOKEN); localStorage.removeItem(LS_EXPIRY); } catch {}
+  accessToken = null; tokenExpiry = 0;
+  if (window.google?.accounts?.oauth2) window.google.accounts.oauth2.revoke(accessToken, () => {});
 }
 
 // ── API helpers ────────────────────────────────────────────────────────────────
