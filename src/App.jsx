@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, memo } from "react";
 import { analyzeImage } from "./motor.js";
 import { enrichLayer } from "./colors.js";
-import { saveCala, listFolders, ROOT_FOLDER_ID, getToken } from "./drive.js";
+import { saveCala, listFolders, listFiles, readJSON, readImageAsDataURL, trashItem, ROOT_FOLDER_ID, getToken } from "./drive.js";
 
 // ─── GPS ──────────────────────────────────────────────────────────────────────
 function getGPS() {
@@ -136,6 +136,11 @@ export default function App() {
   const [saving, setSaving] = useState(false), [saveMsg, setSaveMsg] = useState("");
   const [exps, setExps] = useState([]), [expLoading, setExpLoading] = useState(false);
   const [driveReady, setDriveReady] = useState(false);
+  const [selProj, setSelProj] = useState(null);
+  const [selCala, setSelCala] = useState(null);
+  const [calas, setCalas] = useState([]);
+  const [fichaData, setFichaData] = useState(null);
+  const [fichaImg, setFichaImg] = useState(null);
   const fRef = useRef(), cRef = useRef(), imgFileRef = useRef(null);
   const [imgMeta, setImgMeta] = useState(null);
   const today = new Date().toISOString().slice(0, 10);
@@ -229,6 +234,33 @@ export default function App() {
   const loadExps = async () => {
     setExpLoading(true);
     try { setExps(await listFolders(ROOT_FOLDER_ID)); } catch { setExps([]); }
+    finally { setExpLoading(false); }
+  };
+
+  const loadCalas = async (projId) => {
+    setExpLoading(true);
+    try { setCalas(await listFolders(projId)); } catch { setCalas([]); }
+    finally { setExpLoading(false); }
+  };
+
+  const loadFicha = async (calaId) => {
+    setExpLoading(true);
+    setFichaData(null); setFichaImg(null);
+    try {
+      const files = await listFiles(calaId);
+      // Leer JSON
+      const jsonFile = files.find(f => f.name.endsWith(".json"));
+      if (jsonFile) {
+        const data = await readJSON(jsonFile.id);
+        setFichaData(data);
+      }
+      // Leer foto si existe
+      const imgFile = files.find(f => f.name.endsWith(".jpg") || f.name.endsWith(".jpeg") || f.name.endsWith(".png"));
+      if (imgFile) {
+        const dataUrl = await readImageAsDataURL(imgFile.id);
+        setFichaImg(dataUrl);
+      }
+    } catch (e) { alert("Error cargando ficha: " + e.message); }
     finally { setExpLoading(false); }
   };
 
@@ -419,27 +451,203 @@ export default function App() {
     );
   }
 
-  // EXPEDIENTES
+  // ── EXPEDIENTES: lista de proyectos ──────────────────────────────────────────
   if (scr === "exps") return (
     <Wrap back={home}>
       <div style={{ padding: "20px 24px", maxWidth: 520 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <span style={{ fontSize: 10, color: "#444", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: ".1em" }}>Drive · {exps.length} proyectos</span>
+          <span style={{ fontSize: 10, color: "#444", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: ".1em" }}>
+            📁 Proyectos · {exps.length}
+          </span>
           <button style={B(false, true)} onClick={loadExps}>↺</button>
         </div>
-        {expLoading && <div style={{ fontSize: 11, color: "#2a2820", fontFamily: "monospace", padding: "20px 0" }}>Cargando…</div>}
-        {!expLoading && exps.length === 0 && <div style={{ fontSize: 11, color: "#1e1d1a", fontFamily: "monospace", fontStyle: "italic", padding: "24px 0" }}>Sin expedientes.</div>}
-        {exps.map((f, i) => (
-          <div key={i} style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 4, padding: "14px 16px", marginBottom: 6 }}>
-            <div style={{ fontSize: 11, color: G, fontFamily: "monospace", fontWeight: 700 }}>{f.name}</div>
-            <div style={{ fontSize: 8, color: "#2a2820", fontFamily: "monospace", marginTop: 3 }}>
-              {new Date(f.createdTime).toLocaleString("es")}
-            </div>
+        {expLoading && <div style={{ fontSize: 11, color: "#555", fontFamily: "monospace", padding: "20px 0" }}>Cargando…</div>}
+        {!expLoading && exps.length === 0 && (
+          <div style={{ fontSize: 11, color: "#333", fontFamily: "monospace", fontStyle: "italic", padding: "24px 0" }}>
+            Sin proyectos aún. Crea tu primera cala.
           </div>
+        )}
+        {exps.map((proj, i) => (
+          <button key={i}
+            onClick={() => { setSelProj(proj); setSelCala(null); setCalas([]); setScr("calas"); loadCalas(proj.id); }}
+            style={{ display: "block", width: "100%", background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 4, padding: "16px", marginBottom: 8, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
+            <div style={{ fontSize: 13, color: G, fontFamily: "monospace", fontWeight: 700 }}>📁 {proj.name}</div>
+            <div style={{ fontSize: 8, color: "#444", fontFamily: "monospace", marginTop: 4 }}>
+              Creado: {new Date(proj.createdTime).toLocaleString("es")}
+            </div>
+            <div style={{ fontSize: 8, color: "#555", fontFamily: "monospace", marginTop: 2 }}>
+              Toca para ver calas →
+            </div>
+          </button>
         ))}
         <div style={{ marginTop: 20 }}>
-          <button style={{ ...B(true) }} onClick={() => { setScr("meta"); reset(); }}>+ Nueva Cala</button>
+          <button style={{ ...B(true), width: "100%" }} onClick={() => { setScr("meta"); reset(); }}>+ Nueva Cala</button>
         </div>
+      </div>
+    </Wrap>
+  );
+
+  // ── EXPEDIENTES: calas de un proyecto ─────────────────────────────────────────
+  if (scr === "calas") return (
+    <Wrap back={() => { setScr("exps"); loadExps(); }}>
+      <div style={{ padding: "20px 24px", maxWidth: 520 }}>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 14, color: G, fontFamily: "monospace", fontWeight: 700 }}>📁 {selProj?.name}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+            <span style={{ fontSize: 9, color: "#444", fontFamily: "monospace" }}>{calas.length} calas</span>
+            <button style={B(false, true)} onClick={() => loadCalas(selProj.id)}>↺</button>
+          </div>
+        </div>
+        {expLoading && <div style={{ fontSize: 11, color: "#555", fontFamily: "monospace", padding: "16px 0" }}>Cargando calas…</div>}
+        {!expLoading && calas.length === 0 && (
+          <div style={{ fontSize: 11, color: "#333", fontFamily: "monospace", fontStyle: "italic", padding: "20px 0" }}>
+            Sin calas en este proyecto.
+          </div>
+        )}
+        {calas.map((cala, i) => {
+          // nombre formato: CAL-01__2026-04-27
+          const parts = cala.name.split("__");
+          const code = parts[0] || cala.name;
+          const date = parts[1] || "";
+          return (
+            <div key={i} style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
+              <button
+                onClick={() => { setSelCala(cala); setScr("ficha"); loadFicha(cala.id); }}
+                style={{ display: "block", width: "100%", padding: "14px 16px", cursor: "pointer", textAlign: "left", background: "transparent", border: "none", WebkitTapHighlightColor: "transparent" }}>
+                <div style={{ fontSize: 12, color: "#e8e4d4", fontFamily: "monospace", fontWeight: 600 }}>📋 {code}</div>
+                <div style={{ fontSize: 8, color: "#555", fontFamily: "monospace", marginTop: 4 }}>
+                  {date && `Fecha: ${date}`} · Toca para ver ficha →
+                </div>
+              </button>
+              {/* Botón eliminar cala */}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,.05)", padding: "8px 16px", display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`¿Eliminar cala "${cala.name}"?\nSe moverá a la papelera de Drive.`)) return;
+                    try {
+                      await trashItem(cala.id);
+                      loadCalas(selProj.id);
+                    } catch (e) { alert("Error: " + e.message); }
+                  }}
+                  style={{ ...B(false, true), fontSize: 9, color: "#c87a7a", borderColor: "rgba(200,80,80,.2)" }}>
+                  🗑 Eliminar
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
+          <button style={{ ...B(true), flex: 1 }} onClick={() => {
+            setProjD(selProj.name); projRef.current = selProj.name;
+            setScr("meta");
+          }}>+ Nueva Cala en {selProj?.name}</button>
+        </div>
+      </div>
+    </Wrap>
+  );
+
+  // ── EXPEDIENTES: ficha de una cala ────────────────────────────────────────────
+  if (scr === "ficha") return (
+    <Wrap back={() => { setScr("calas"); }}>
+      <div style={{ padding: "16px 20px" }}>
+        {expLoading && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 0", gap: 12 }}>
+            <div style={{ fontSize: 9, color: G, fontFamily: "monospace" }}>Cargando ficha…</div>
+            <div style={{ display: "flex", gap: 3 }}>
+              {[...Array(8)].map((_, i) => <div key={i} style={{ width: 8, height: 8, borderRadius: 2, background: G, opacity: .3, animation: `pulse 1.2s ease-in-out ${i * .15}s infinite` }} />)}
+            </div>
+          </div>
+        )}
+        {!expLoading && fichaData && (
+          <>
+            {/* Header ficha */}
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ fontSize: 14, color: G, fontFamily: "monospace", fontWeight: 700 }}>{fichaData.proyecto}</span>
+              <span style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}> / {fichaData.codigo}</span>
+              <span style={{ fontSize: 8, color: "#2a2820", fontFamily: "monospace" }}> · {fichaData.capas?.length || 0} capas · {fichaData.fecha}</span>
+            </div>
+            {/* GPS */}
+            {fichaData.gps?.latitud !== "N/A" && (
+              <div style={{ padding: "6px 10px", background: "rgba(0,100,50,.06)", border: "1px solid rgba(0,150,80,.2)", borderRadius: 3, fontSize: 8, fontFamily: "monospace", color: "#60b060", marginBottom: 10 }}>
+                📍 Lat:{fichaData.gps.latitud} Lon:{fichaData.gps.longitud} · Alt:{fichaData.gps.altimetria} · Prec:{fichaData.gps.precision}
+              </div>
+            )}
+            {/* Meta foto */}
+            {fichaData.metadatos_foto && (
+              <div style={{ padding: "7px 10px", background: "rgba(200,169,110,.04)", border: "1px solid rgba(200,169,110,.1)", borderRadius: 3, fontSize: 8, fontFamily: "monospace", color: "#555", marginBottom: 10, lineHeight: 2 }}>
+                📐 {fichaData.metadatos_foto.resolucion} · {fichaData.metadatos_foto.dispositivo}<br />
+                📅 {fichaData.metadatos_foto.fecha_foto}
+                {fichaData.metadatos_foto.iluminacion_medida && <> · 💡 {fichaData.metadatos_foto.iluminacion_medida}</>}
+              </div>
+            )}
+            {/* Imagen si existe */}
+            {fichaImg && (
+              <img src={fichaImg} alt="Cala" style={{ maxWidth: "100%", maxHeight: 300, objectFit: "contain", borderRadius: 4, border: "1px solid rgba(255,255,255,.08)", display: "block", marginBottom: 12 }} />
+            )}
+            {/* Franja colores */}
+            <div style={{ display: "flex", height: 18, borderRadius: 3, overflow: "hidden", marginBottom: 6, border: "1px solid rgba(255,255,255,.07)" }}>
+              {fichaData.capas?.map((l, i) => <div key={i} style={{ flex: 1, background: l.hex }} title={`C${l.numero}: ${l.nombre}`} />)}
+            </div>
+            <div style={{ fontSize: 7.5, color: G, fontFamily: "monospace", marginBottom: 12 }}>
+              ✦ {fichaData.capas?.length} capas · {fichaData.motor}
+            </div>
+            {/* Tabla capas */}
+            <div style={{ overflowX: "auto", marginBottom: 16 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 360 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,.12)" }}>
+                    {["#", "Color", "Nombre", "HEX", "NCS", "RAL", "American Colors"].map(h => (
+                      <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontSize: 7, color: "#555", letterSpacing: ".1em", textTransform: "uppercase", background: "rgba(200,169,110,.06)", fontWeight: 400 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {fichaData.capas?.map((l, i) => {
+                    const lum = l.rgb ? (l.rgb.r * 299 + l.rgb.g * 587 + l.rgb.b * 114) / 1000 : 128;
+                    const fg = lum > 140 ? "#111" : "#fff";
+                    return (
+                      <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,.05)" }}>
+                        <td style={{ padding: "6px 8px", color: G, fontWeight: 900, fontSize: 14 }}>{l.numero}</td>
+                        <td style={{ padding: "6px 6px" }}>
+                          <div onClick={() => copyVal(l.hex)} style={{ width: 36, height: 36, background: l.hex, borderRadius: 3, border: "1px solid rgba(255,255,255,.15)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ color: fg, fontSize: 5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{l.hex}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: "6px 8px", color: "#a09070", fontWeight: 600, fontSize: 9, whiteSpace: "nowrap" }}>{l.nombre}</td>
+                        <td style={{ padding: "6px 8px", color: G, fontWeight: 700, fontSize: 9, cursor: "pointer" }} onClick={() => copyVal(l.hex)}>{copied === l.hex ? "✓" : l.hex}</td>
+                        <td style={{ padding: "6px 8px", color: "#5090d0", fontSize: 8.5, whiteSpace: "nowrap" }}>{l.ncs}</td>
+                        <td style={{ padding: "6px 8px", color: "#bbb", fontSize: 8, whiteSpace: "nowrap" }}>{l.ral}</td>
+                        <td style={{ padding: "6px 8px", color: "#5580bb", fontSize: 8 }}>{l.american_colors}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Acciones */}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,.07)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              <button style={{ ...B(true), width: "100%", padding: "14px" }}
+                onClick={() => openPDF(fichaData.proyecto, fichaData.codigo, fichaData.fecha, fichaData.capas?.map(l => ({ pos: l.numero, name: l.nombre, hex: l.hex, ncs: l.ncs, ral: l.ral, ralDE: l.ral_dE || "—", american: l.american_colors, rgb: l.rgb || { r: 128, g: 128, b: 128 }, lab: l.lab || {} })) || [], fichaImg, fichaData.metadatos_foto, fichaData.gps)}>
+                🖨 Imprimir PDF
+              </button>
+              <button style={{ ...B(false, true), color: "#c87a7a", borderColor: "rgba(200,80,80,.25)", padding: "11px" }}
+                onClick={async () => {
+                  if (!confirm(`¿Eliminar cala "${selCala?.name}"?\nSe moverá a la papelera de Drive.`)) return;
+                  try {
+                    await trashItem(selCala.id);
+                    setScr("calas");
+                    loadCalas(selProj.id);
+                  } catch (e) { alert("Error: " + e.message); }
+                }}>
+                🗑 Eliminar esta cala
+              </button>
+              <button style={{ ...B(true), padding: "11px" }}
+                onClick={() => { setProjD(fichaData.proyecto); projRef.current = fichaData.proyecto; setScr("meta"); }}>
+                + Nueva Cala en {fichaData.proyecto}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </Wrap>
   );
