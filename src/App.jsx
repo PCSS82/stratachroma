@@ -183,7 +183,7 @@ const Hdr = memo(({ back }) => (
   <div style={{ borderBottom: `1px solid ${BORDER}`, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: BG }}>
     <div>
       <div style={{ fontSize: 9, color: MUTED, fontFamily: "monospace", letterSpacing: "0.14em", marginBottom: 2 }}>
-        STRATACHROMA · v20 · MC 1M P50 CIE-LAB · GPS · MONTEA_COLOR
+        STRATACHROMA · v21 · MC 1M P50 CIE-LAB · GPS · MONTEA_COLOR
       </div>
       <h1 style={{ fontSize: 22, fontWeight: 300, color: TEXT, margin: 0, letterSpacing: ".05em" }}>
         STRATA<span style={{ color: GOLD }}>CHROMA</span>
@@ -193,66 +193,133 @@ const Hdr = memo(({ back }) => (
   </div>
 ));
 
+// ─── SPEECH RECOGNITION HOOK ─────────────────────────────────────────────────
+// Usa continuous:false + auto-restart para máxima compatibilidad
+// (continuous:true se corta en iOS/Android; este patrón funciona en todos)
+function hasSpeechAPI() {
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+function useSpeechRecognition({ onFinal, onInterim }) {
+  const recRef    = useRef(null);
+  const activeRef = useRef(false);
+  const timerRef  = useRef(null);
+  const fnRef     = useRef(null);
+
+  // fnRef se actualiza cada render para evitar closures stale
+  useEffect(() => {
+    fnRef.current = () => {
+      if (!activeRef.current || !hasSpeechAPI()) return;
+      const SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const rec = new SR();
+      rec.lang            = "es-ES";
+      rec.continuous      = false;   // más fiable en todos los browsers
+      rec.interimResults  = true;    // texto en tiempo real
+      rec.maxAlternatives = 1;
+
+      rec.onresult = e => {
+        let final = "", interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final   += e.results[i][0].transcript;
+          else                       interim += e.results[i][0].transcript;
+        }
+        if (final.trim()) { onFinal(final.trim()); onInterim(""); }
+        else if (interim)   onInterim(interim);
+      };
+
+      rec.onend = () => {
+        onInterim("");
+        // Auto-restart mientras el usuario no haya detenido
+        if (activeRef.current)
+          timerRef.current = setTimeout(() => fnRef.current?.(), 200);
+      };
+
+      rec.onerror = e => {
+        onInterim("");
+        if (e.error === "no-speech" || e.error === "aborted") return; // onend reiniciará
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          activeRef.current = false;
+          alert(
+            "Acceso al micrófono denegado.\n\n" +
+            "Para activarlo:\n" +
+            "• Chrome/Edge: icono 🔒 en la barra de dirección → Micrófono → Permitir\n" +
+            "• Safari iOS: Ajustes → Safari → Micrófono → Permitir\n" +
+            "• Luego recarga la página."
+          );
+        }
+        // Otros errores: onend se encargará del reinicio
+      };
+
+      recRef.current = rec;
+      try { rec.start(); } catch {
+        timerRef.current = setTimeout(() => fnRef.current?.(), 400);
+      }
+    };
+  });
+
+  const start = useCallback(() => {
+    if (!hasSpeechAPI()) {
+      alert(
+        "Reconocimiento de voz no disponible.\n\n" +
+        "Navegadores compatibles:\n" +
+        "• Chrome (desktop o Android) ✓\n" +
+        "• Safari (iOS 14.5+ / macOS) ✓\n" +
+        "• Edge ✓"
+      );
+      return false;
+    }
+    activeRef.current = true;
+    fnRef.current?.();
+    return true;
+  }, []);
+
+  const stop = useCallback(() => {
+    activeRef.current = false;
+    clearTimeout(timerRef.current);
+    onInterim("");
+    try { recRef.current?.abort(); } catch {}
+    recRef.current = null;
+  }, [onInterim]);
+
+  useEffect(() => () => {
+    activeRef.current = false;
+    clearTimeout(timerRef.current);
+    try { recRef.current?.abort(); } catch {}
+  }, []);
+
+  return { start, stop };
+}
+
 // ─── MODAL DOCUMENTACIÓN ──────────────────────────────────────────────────────
 const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose }) => {
-  const [note, setNote] = useState(initialNote || "");
+  const [note, setNote]       = useState(initialNote || "");
+  const [interim, setInterim] = useState("");
   const [recording, setRecording] = useState(false);
-  const recognizerRef = useRef(null);
-  const activeRef = useRef(false);
+
+  const handleFinal = useCallback(text => {
+    setNote(prev => prev ? prev.trimEnd() + " " + text : text);
+  }, []);
+
+  const { start, stop } = useSpeechRecognition({
+    onFinal: handleFinal,
+    onInterim: setInterim,
+  });
+
   const { r, g, b } = layer.rgb;
   const lum = (r * 299 + g * 587 + b * 114) / 1000;
-  const fg = lum > 140 ? "#111" : "#fff";
+  const fg  = lum > 140 ? "#111" : "#fff";
 
-  const createRec = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return null;
-    const rec = new SR();
-    rec.lang = "es-ES";
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.onresult = e => {
-      let text = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) text += e.results[i][0].transcript + " ";
-      }
-      if (text) setNote(prev => prev ? prev + " " + text.trim() : text.trim());
-    };
-    rec.onend = () => {
-      if (activeRef.current) {
-        try { const r2 = createRec(); r2?.start(); recognizerRef.current = r2; }
-        catch { activeRef.current = false; setRecording(false); }
-      } else {
-        setRecording(false);
-      }
-    };
-    rec.onerror = e => {
-      if (e.error === "no-speech" && activeRef.current) return;
-      activeRef.current = false; setRecording(false);
-    };
-    return rec;
+  const toggle = () => {
+    if (recording) { stop(); setRecording(false); }
+    else { if (start()) setRecording(true); }
   };
 
-  const startRecording = () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Reconocimiento de voz no disponible.\nUsa Chrome o Safari."); return; }
-    const rec = createRec();
-    if (!rec) return;
-    try { rec.start(); recognizerRef.current = rec; activeRef.current = true; setRecording(true); }
-    catch { activeRef.current = false; setRecording(false); }
-  };
-
-  const stopRecording = () => {
-    activeRef.current = false;
-    recognizerRef.current?.stop();
-    setRecording(false);
-  };
-
-  useEffect(() => () => { activeRef.current = false; recognizerRef.current?.stop(); }, []);
+  useEffect(() => () => stop(), []); // limpieza al desmontar
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: "#141210", border: `1px solid ${BORDER_GOLD}`, borderRadius: "12px 12px 0 0", width: "100%", maxWidth: 560, padding: "24px 20px 32px", maxHeight: "80vh", overflowY: "auto" }}>
+      onClick={e => { if (e.target === e.currentTarget) { stop(); onClose(); } }}>
+      <div style={{ background: "#141210", border: `1px solid ${BORDER_GOLD}`, borderRadius: "12px 12px 0 0", width: "100%", maxWidth: 560, padding: "24px 20px 36px", maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
           <div style={{ width: 52, height: 52, background: layer.hex, borderRadius: 6, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <span style={{ color: fg, fontSize: 5.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)" }}>{layer.hex}</span>
@@ -262,7 +329,7 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
             <div style={{ fontSize: 13, color: TEXT, fontFamily: "monospace", fontWeight: 600 }}>{layer.name}</div>
             <div style={{ fontSize: 9, color: TEXT2, fontFamily: "monospace" }}>{layer.ncs} · {layer.ral?.split(" — ")[0]}</div>
           </div>
-          <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: MUTED, fontSize: 20, cursor: "pointer", padding: "0 4px" }}>✕</button>
+          <button onClick={() => { stop(); onClose(); }} style={{ marginLeft: "auto", background: "none", border: "none", color: MUTED, fontSize: 20, cursor: "pointer", padding: "0 4px" }}>✕</button>
         </div>
 
         <label style={lbl}>Observaciones de campo</label>
@@ -274,29 +341,42 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
           style={{ ...inp, fontSize: 14, resize: "vertical", lineHeight: 1.6 }}
         />
 
-        <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center" }}>
+        {/* Texto en tiempo real del reconocedor */}
+        {interim && (
+          <div style={{ marginTop: 6, padding: "6px 10px", background: "rgba(200,169,110,.06)", border: `1px solid ${BORDER_GOLD}`, borderRadius: 3, fontSize: 12, color: TEXT2, fontFamily: "monospace", fontStyle: "italic" }}>
+            {interim}…
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
           <button
-            onClick={recording ? stopRecording : startRecording}
-            style={{ ...btn(recording, false), padding: "12px 20px", fontSize: 11, minWidth: 140,
-              background: recording ? "rgba(180,60,60,.18)" : "rgba(255,255,255,.05)",
+            onClick={toggle}
+            style={{ ...btn(recording, false), padding: "12px 20px", fontSize: 11, minWidth: 150,
+              background: recording ? "rgba(180,60,60,.2)" : "rgba(255,255,255,.05)",
               borderColor: recording ? "rgba(220,80,80,.5)" : BORDER,
               color: recording ? "#e07070" : TEXT2 }}>
-            {recording ? "⏹ Detener" : "🎙 Dictar"}
+            {recording ? "⏹ Detener voz" : "🎙 Dictar nota"}
           </button>
-          {recording && <span style={{ fontSize: 9, color: "#e07070", fontFamily: "monospace", animation: "pulse 1s ease-in-out infinite" }}>● Grabando…</span>}
+          {recording && <span style={{ fontSize: 9, color: "#e07070", fontFamily: "monospace", animation: "blink 1s ease-in-out infinite" }}>● Escuchando…</span>}
           {note && !recording && <button onClick={() => setNote("")} style={{ ...btn(false, true), fontSize: 9 }}>✕ Limpiar</button>}
         </div>
 
+        {!hasSpeechAPI() && (
+          <div style={{ marginTop: 10, fontSize: 9, color: "#e07870", fontFamily: "monospace", padding: "6px 10px", background: "rgba(180,60,60,.08)", borderRadius: 3 }}>
+            ⚠ Voz no disponible en este navegador — escribe manualmente o usa Chrome/Safari
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button
-            onClick={() => { onSave(layerIndex, note.trim()); onClose(); }}
+            onClick={() => { stop(); onSave(layerIndex, note.trim()); onClose(); }}
             style={{ ...btn(true), flex: 1, padding: "14px", fontSize: 12 }}>
             ✓ Guardar nota
           </button>
-          <button onClick={onClose} style={{ ...btn(false), padding: "14px 20px", fontSize: 11 }}>Cancelar</button>
+          <button onClick={() => { stop(); onClose(); }} style={{ ...btn(false), padding: "14px 20px", fontSize: 11 }}>Cancelar</button>
         </div>
       </div>
-      <style>{`@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}`}</style>
+      <style>{`@keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}`}</style>
     </div>
   );
 });
