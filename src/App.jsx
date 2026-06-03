@@ -310,11 +310,14 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
   }, []);
 
   // Auto-arranque al montar el modal.
-  // Desktop/Android: funciona siempre que el permiso esté concedido.
-  // iOS: la primera vez puede requerir que el usuario toque "Dictar".
+  // Intenta arrancar la transcripción directamente. Si el permiso ya está
+  // concedido (sesión previa), funciona sin ningún diálogo. Si el permiso
+  // aún no fue concedido, el SpeechRecognition lanza "not-allowed" y el hook
+  // lo para silenciosamente; el usuario verá el botón "🎙 Dictar".
   useEffect(() => {
     let cancelled = false;
-    activateMic().then(ok => { if (!cancelled && ok) setRecording(true); });
+    const ok = startRef.current();
+    if (!cancelled && ok) setRecording(true);
     return () => { cancelled = true; stopRef.current(); };
   }, []); // eslint-disable-line
 
@@ -399,14 +402,16 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
     <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
       <td style={{ padding: "8px 10px", color: GOLD, fontWeight: 900, fontSize: 16, width: 36, textAlign: "center" }}>{layer.pos}</td>
       <td style={{ padding: "8px 6px", width: 54 }}>
-        <div onClick={() => onOpenNote(layerIndex)}
-          title={hasNote ? "Nota guardada — clic para editar" : "Clic para documentar esta capa"}
-          style={{ position: "relative", width: 40, height: 40, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(80,200,120,.6)" : "rgba(200,100,50,.5)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {/* button en lugar de div para que el tap funcione en iOS Safari */}
+        <button
+          onClick={() => onOpenNote(layerIndex)}
+          title={hasNote ? "Nota guardada — toca para editar" : "Toca para documentar esta capa"}
+          style={{ position: "relative", width: 40, height: 40, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(80,200,120,.6)" : "rgba(200,100,50,.5)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, WebkitAppearance: "none" }}>
           <span style={{ color: fg, fontSize: 5.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{layer.hex}</span>
           <div style={{ position: "absolute", top: -5, right: -5, width: 12, height: 12, borderRadius: "50%", background: hasNote ? "#4cc87a" : "#e07840", border: `2px solid ${BG}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ fontSize: 6, color: "#fff", fontWeight: 900, lineHeight: 1 }}>{hasNote ? "✓" : "!"}</span>
           </div>
-        </div>
+        </button>
       </td>
       <td style={{ padding: "8px 8px" }}>
         <div style={{ fontSize: 10, color: TEXT2, fontWeight: 600, marginBottom: 3 }}>{layer.name}</div>
@@ -835,8 +840,8 @@ export default function App() {
             </div>
             <div style={{ display: "flex", gap: 3, flexWrap: "wrap", maxWidth: 80, justifyContent: "flex-end" }}>
               {activeLayers.map((_, i) => (
-                <div key={i} onClick={() => setActiveNoteLayer(i)}
-                  style={{ width: 10, height: 10, borderRadius: "50%", background: (layerNotes[i] || "").trim() ? "#4cc87a" : "#e07840", cursor: "pointer", border: "1px solid rgba(0,0,0,.2)" }} />
+                <button key={i} onClick={() => setActiveNoteLayer(i)}
+                  style={{ width: 10, height: 10, borderRadius: "50%", background: (layerNotes[i] || "").trim() ? "#4cc87a" : "#e07840", cursor: "pointer", border: "1px solid rgba(0,0,0,.2)", padding: 0, WebkitAppearance: "none" }} />
               ))}
             </div>
           </div>
