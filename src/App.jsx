@@ -498,10 +498,12 @@ export default function App() {
   const [showMicConsent, setShowMicConsent] = useState(false);
 
   useEffect(() => {
-    const hasMic = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (hasMic && !localStorage.getItem("sc_mic_consent")) {
-      setShowMicConsent(true);
-    }
+    try {
+      const hasMic = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      if (hasMic && !localStorage.getItem("sc_mic_consent")) {
+        setShowMicConsent(true);
+      }
+    } catch {}
   }, []);
 
   const handleMicConsent = async (accept) => {
@@ -636,27 +638,25 @@ export default function App() {
 
   // ── HOME ────────────────────────────────────────────────────────────────────
   if (scr === "home") return (
-    <>
-      <Wrap>
-        <div style={{ padding: "40px 24px", maxWidth: 460 }}>
-          <div style={{ fontFamily: "monospace", marginBottom: 40, lineHeight: 2 }}>
-            <div style={{ fontSize: 12, color: TEXT2 }}>Análisis estratigráfico de calas de pintura</div>
-            <div style={{ fontSize: 10, color: GOLD, marginTop: 4 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS desde EXIF</div>
-            <div style={{ fontSize: 10, color: "#6699cc", marginTop: 2 }}>NCS · RAL · HEX · American Colors</div>
-            <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · MONTEA_COLOR · Notas de voz</div>
-          </div>
-          <button style={{ ...btn(true), padding: "16px 28px", fontSize: 12 }} onClick={() => setScr("meta")}>
-            + Nueva Cala
-          </button>
+    <Wrap>
+      <div style={{ padding: "40px 24px", maxWidth: 460 }}>
+        <div style={{ fontFamily: "monospace", marginBottom: 40, lineHeight: 2 }}>
+          <div style={{ fontSize: 12, color: TEXT2 }}>Análisis estratigráfico de calas de pintura</div>
+          <div style={{ fontSize: 10, color: GOLD, marginTop: 4 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS desde EXIF</div>
+          <div style={{ fontSize: 10, color: "#6699cc", marginTop: 2 }}>NCS · RAL · HEX · American Colors</div>
+          <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · MONTEA_COLOR · Notas de voz</div>
         </div>
-      </Wrap>
+        <button style={{ ...btn(true), padding: "16px 28px", fontSize: 12 }} onClick={() => setScr("meta")}>
+          + Nueva Cala
+        </button>
+      </div>
       {showMicConsent && (
         <MicConsentModal
           onAccept={() => handleMicConsent(true)}
           onDecline={() => handleMicConsent(false)}
         />
       )}
-    </>
+    </Wrap>
   );
 
   // ── META ────────────────────────────────────────────────────────────────────
