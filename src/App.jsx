@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect, memo, useMemo } from "react";
 import { analyzeImage, rgbToLab } from "./motor.js";
 import { enrichLayer } from "./colors.js";
+import exifr from "exifr";
 
-// ─── GPS ──────────────────────────────────────────────────────────────────────
+// ─── GPS (manual/fallback) ────────────────────────────────────────────────────
 function getGPS() {
   return new Promise(res => {
     if (!navigator.geolocation) { res(null); return; }
@@ -94,14 +95,14 @@ tr:nth-child(even) td{background:#faf8f4}
 </div>
 <div class="content">
 <div class="hdr">
-  <div><div class="brand">STRATA<b>CHROMA</b></div><div style="font-size:6px;color:#aaa">FICHA TÉCNICA · CALA ESTRATIGRÁFICA · v20</div></div>
+  <div><div class="brand">STRATA<b>CHROMA</b></div><div style="font-size:6px;color:#aaa">FICHA TÉCNICA · CALA ESTRATIGRÁFICA · v22</div></div>
   <div class="info">Proyecto: <b>${proj}</b><br>Código: <b style="color:#8B6914">${code}</b><br>${date} · ${layers.length} capas<br>${now}</div>
 </div>
 <div class="mbox">
   <div><div class="mt">Resolución</div><div class="mv">${meta?.size || "—"}</div></div>
   <div><div class="mt">Fecha foto</div><div class="mv">${meta?.datetime || "—"}</div></div>
   <div><div class="mt">Dispositivo</div><div class="mv">${meta?.device || "—"}</div></div>
-  <div class="gps">📍 Lat: <b>${gps?.lat || "N/A"}</b> &nbsp; Lon: <b>${gps?.lon || "N/A"}</b> &nbsp; Alt: <b>${gps?.alt || "N/A"}</b> &nbsp; Precisión: <b>${gps?.acc || "N/A"}</b></div>
+  <div class="gps">📍 Lat: <b>${gps?.lat || "N/A"}</b> &nbsp; Lon: <b>${gps?.lon || "N/A"}</b> &nbsp; Alt: <b>${gps?.alt || "N/A"}</b> &nbsp; ${gps?.acc === "EXIF" ? "Fuente: <b>EXIF foto</b>" : `Precisión: <b>${gps?.acc || "N/A"}</b>`}</div>
   ${calibInfo ? `<div class="calib">⚖ Calibración MONTEA_COLOR activa · Ref: ${calibInfo.refHex} · Medido: ${calibInfo.measHex} · ΔL:${calibInfo.dL} Δa:${calibInfo.da} Δb:${calibInfo.db}</div>` : ""}
 </div>
 <div class="strip">${layers.map(l => `<div style="background:${l.hex}"></div>`).join("")}</div>
@@ -118,7 +119,7 @@ ${layers.map(l => {
 ${hasNotes ? `<div class="notes-section"><h4>Observaciones de campo</h4><table><tr><th>#</th><th>Nota</th></tr>${notesRows}</table></div>` : ""}
 </div>
 </div>
-<div class="footer"><span>STRATACHROMA v20 · MC 1M P50 CIE-LAB · NCS · RAL · HEX · American Colors · MONTEA_COLOR</span><span>${now}</span></div>
+<div class="footer"><span>STRATACHROMA v22 · MC 1M P50 CIE-LAB · NCS · RAL · HEX · American Colors · MONTEA_COLOR · EXIF</span><span>${now}</span></div>
 </div>
 </body></html>`;
 }
@@ -183,7 +184,7 @@ const Hdr = memo(({ back }) => (
   <div style={{ borderBottom: `1px solid ${BORDER}`, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: BG }}>
     <div>
       <div style={{ fontSize: 9, color: MUTED, fontFamily: "monospace", letterSpacing: "0.14em", marginBottom: 2 }}>
-        STRATACHROMA · v21 · MC 1M P50 CIE-LAB · GPS · MONTEA_COLOR
+        STRATACHROMA · v22 · MC 1M P50 CIE-LAB · EXIF · MONTEA_COLOR
       </div>
       <h1 style={{ fontSize: 22, fontWeight: 300, color: TEXT, margin: 0, letterSpacing: ".05em" }}>
         STRATA<span style={{ color: GOLD }}>CHROMA</span>
@@ -194,92 +195,80 @@ const Hdr = memo(({ back }) => (
 ));
 
 // ─── SPEECH RECOGNITION HOOK ─────────────────────────────────────────────────
-// Usa continuous:false + auto-restart para máxima compatibilidad
-// (continuous:true se corta en iOS/Android; este patrón funciona en todos)
 function hasSpeechAPI() {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
 function useSpeechRecognition({ onFinal, onInterim }) {
-  const recRef    = useRef(null);
-  const activeRef = useRef(false);
-  const timerRef  = useRef(null);
-  const fnRef     = useRef(null);
+  const recRef       = useRef(null);
+  const activeRef    = useRef(false);
+  const timerRef     = useRef(null);
+  const onFinalRef   = useRef(onFinal);
+  const onInterimRef = useRef(onInterim);
+  const [micDenied, setMicDenied] = useState(false);
 
-  // fnRef se actualiza cada render para evitar closures stale
-  useEffect(() => {
-    fnRef.current = () => {
-      if (!activeRef.current || !hasSpeechAPI()) return;
-      const SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const rec = new SR();
-      rec.lang            = "es-ES";
-      rec.continuous      = false;   // más fiable en todos los browsers
-      rec.interimResults  = true;    // texto en tiempo real
-      rec.maxAlternatives = 1;
+  // Keep callback refs fresh on every render
+  onFinalRef.current   = onFinal;
+  onInterimRef.current = onInterim;
 
-      rec.onresult = e => {
-        let final = "", interim = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) final   += e.results[i][0].transcript;
-          else                       interim += e.results[i][0].transcript;
-        }
-        if (final.trim()) { onFinal(final.trim()); onInterim(""); }
-        else if (interim)   onInterim(interim);
-      };
+  const startRec = useCallback(() => {
+    if (!activeRef.current || !hasSpeechAPI()) return;
+    const SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.lang           = "es-ES";
+    rec.continuous     = !IS_IOS;  // continuous en desktop/Android; false en iOS
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
 
-      rec.onend = () => {
-        onInterim("");
-        // Auto-restart mientras el usuario no haya detenido
-        if (activeRef.current)
-          timerRef.current = setTimeout(() => fnRef.current?.(), 200);
-      };
-
-      rec.onerror = e => {
-        onInterim("");
-        if (e.error === "no-speech" || e.error === "aborted") return; // onend reiniciará
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          activeRef.current = false;
-          alert(
-            "Acceso al micrófono denegado.\n\n" +
-            "Para activarlo:\n" +
-            "• Chrome/Edge: icono 🔒 en la barra de dirección → Micrófono → Permitir\n" +
-            "• Safari iOS: Ajustes → Safari → Micrófono → Permitir\n" +
-            "• Luego recarga la página."
-          );
-        }
-        // Otros errores: onend se encargará del reinicio
-      };
-
-      recRef.current = rec;
-      try { rec.start(); } catch {
-        timerRef.current = setTimeout(() => fnRef.current?.(), 400);
+    rec.onresult = e => {
+      let final = "", interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final   += e.results[i][0].transcript;
+        else                       interim += e.results[i][0].transcript;
       }
+      if (final.trim()) { onFinalRef.current(final.trim()); onInterimRef.current(""); }
+      else if (interim)   onInterimRef.current(interim);
     };
-  });
+
+    rec.onend = () => {
+      onInterimRef.current("");
+      // iOS necesita reinicio manual; en desktop continuous:true rara vez termina solo
+      if (activeRef.current)
+        timerRef.current = setTimeout(startRec, 150);
+    };
+
+    rec.onerror = e => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        activeRef.current = false;
+        setMicDenied(true);
+        return;
+      }
+      // no-speech / aborted → onend se encarga del reinicio
+    };
+
+    recRef.current = rec;
+    try { rec.start(); } catch {
+      timerRef.current = setTimeout(startRec, 400);
+    }
+  }, []);
 
   const start = useCallback(() => {
-    if (!hasSpeechAPI()) {
-      alert(
-        "Reconocimiento de voz no disponible.\n\n" +
-        "Navegadores compatibles:\n" +
-        "• Chrome (desktop o Android) ✓\n" +
-        "• Safari (iOS 14.5+ / macOS) ✓\n" +
-        "• Edge ✓"
-      );
-      return false;
-    }
+    if (!hasSpeechAPI()) return false;
+    setMicDenied(false);
     activeRef.current = true;
-    fnRef.current?.();
+    startRec();
     return true;
-  }, []);
+  }, [startRec]);
 
   const stop = useCallback(() => {
     activeRef.current = false;
     clearTimeout(timerRef.current);
-    onInterim("");
+    onInterimRef.current("");
     try { recRef.current?.abort(); } catch {}
     recRef.current = null;
-  }, [onInterim]);
+  }, []);
 
   useEffect(() => () => {
     activeRef.current = false;
@@ -287,7 +276,7 @@ function useSpeechRecognition({ onFinal, onInterim }) {
     try { recRef.current?.abort(); } catch {}
   }, []);
 
-  return { start, stop };
+  return { start, stop, micDenied };
 }
 
 // ─── MODAL DOCUMENTACIÓN ──────────────────────────────────────────────────────
@@ -300,7 +289,7 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
     setNote(prev => prev ? prev.trimEnd() + " " + text : text);
   }, []);
 
-  const { start, stop } = useSpeechRecognition({
+  const { start, stop, micDenied } = useSpeechRecognition({
     onFinal: handleFinal,
     onInterim: setInterim,
   });
@@ -361,9 +350,14 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
           {note && !recording && <button onClick={() => setNote("")} style={{ ...btn(false, true), fontSize: 9 }}>✕ Limpiar</button>}
         </div>
 
+        {micDenied && (
+          <div style={{ marginTop: 8, fontSize: 9, color: "#e07870", fontFamily: "monospace", padding: "6px 10px", background: "rgba(180,60,60,.08)", borderRadius: 3 }}>
+            ⚠ Micrófono bloqueado — actívalo en ajustes del navegador y recarga
+          </div>
+        )}
         {!hasSpeechAPI() && (
-          <div style={{ marginTop: 10, fontSize: 9, color: "#e07870", fontFamily: "monospace", padding: "6px 10px", background: "rgba(180,60,60,.08)", borderRadius: 3 }}>
-            ⚠ Voz no disponible en este navegador — escribe manualmente o usa Chrome/Safari
+          <div style={{ marginTop: 8, fontSize: 9, color: "#e07870", fontFamily: "monospace", padding: "6px 10px", background: "rgba(180,60,60,.08)", borderRadius: 3 }}>
+            ⚠ Voz no disponible — usa Chrome, Safari o Edge
           </div>
         )}
 
@@ -496,33 +490,36 @@ export default function App() {
   const copyVal = v => { navigator.clipboard?.writeText(v); setCopied(v); setTimeout(() => setCopied(null), 1500); };
   const saveNote = (idx, text) => setLayerNotes(prev => ({ ...prev, [idx]: text }));
 
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    setGpsStatus("Obteniendo GPS…");
-    navigator.geolocation.getCurrentPosition(
-      p => {
-        const pos = {
-          lat: p.coords.latitude.toFixed(6),
-          lon: p.coords.longitude.toFixed(6),
-          alt: p.coords.altitude ? p.coords.altitude.toFixed(1) + "m" : "N/A",
-          acc: p.coords.accuracy ? p.coords.accuracy.toFixed(0) + "m" : "N/A",
-        };
-        setGps(pos); setGpsStatus(`📍 ${pos.lat}, ${pos.lon}`);
-      },
-      () => setGpsStatus("GPS: permite acceso"),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  }, []);
-
   const pick = useCallback(async file => {
     if (!file?.type.startsWith("image/")) { setErr("Archivo no es imagen"); return; }
     setErr(null); setStatus("Leyendo…"); imgFileRef.current = file;
+
+    // Extraer GPS y fecha desde metadatos EXIF de la foto
+    let exifDatetime = null;
+    try {
+      const exif = await exifr.parse(file, { gps: true, pick: ["DateTimeOriginal", "GPSAltitude", "GPSAltitudeRef"] });
+      if (exif?.latitude != null && exif?.longitude != null) {
+        const altRef = exif.GPSAltitudeRef; // 0 = sobre nivel del mar, 1 = bajo
+        const altVal = exif.GPSAltitude;
+        setGps({
+          lat: exif.latitude.toFixed(6),
+          lon: exif.longitude.toFixed(6),
+          alt: altVal != null ? `${altRef === 1 ? "-" : ""}${altVal.toFixed(1)}m` : "N/A",
+          acc: "EXIF",
+        });
+        setGpsStatus("📍 GPS desde foto");
+      }
+      if (exif?.DateTimeOriginal) {
+        exifDatetime = new Date(exif.DateTimeOriginal).toLocaleString("es");
+      }
+    } catch { /* sin EXIF o EXIF sin GPS — continuar */ }
+
     const reader = new FileReader();
     reader.onload = ev => {
       const img = new Image();
       img.onload = () => setImgMeta({
         size: `${img.width}×${img.height}px`,
-        datetime: new Date(file.lastModified).toLocaleString("es"),
+        datetime: exifDatetime || new Date(file.lastModified).toLocaleString("es"),
         device: navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.split(";")?.[1]?.trim() || navigator.platform || "—",
         filename: file.name,
         filesize: `${(file.size / 1024).toFixed(1)} KB`,
@@ -571,7 +568,7 @@ export default function App() {
     }
     const p = projRef.current || projD, c = codeRef.current || codeD;
     const csv = [
-      `# STRATACHROMA v20 | ${p} | ${c} | ${today}`,
+      `# STRATACHROMA v22 | ${p} | ${c} | ${today}`,
       `# GPS: Lat:${gps?.lat || "N/A"} Lon:${gps?.lon || "N/A"} Alt:${gps?.alt || "N/A"}`,
       calibInfo ? `# Calibración MONTEA_COLOR: Ref ${calibInfo.refHex} / Medido ${calibInfo.measHex} / ΔL${calibInfo.dL} Δa${calibInfo.da} Δb${calibInfo.db}` : "",
       "Capa,Nombre,HEX,NCS,RAL,dE,American,R,G,B,Notas",
@@ -587,16 +584,11 @@ export default function App() {
   if (scr === "home") return (
     <Wrap>
       <div style={{ padding: "40px 24px", maxWidth: 460 }}>
-        {gpsStatus && (
-          <div style={{ fontSize: 9, color: gps ? "#4cc87a" : MUTED, fontFamily: "monospace", marginBottom: 20, padding: "7px 12px", background: "rgba(0,80,40,.08)", border: "1px solid rgba(0,150,80,.15)", borderRadius: 3 }}>
-            {gps ? `📍 ${gps.lat}, ${gps.lon} · Alt: ${gps.alt}` : `⏳ ${gpsStatus}`}
-          </div>
-        )}
         <div style={{ fontFamily: "monospace", marginBottom: 36, lineHeight: 1.9 }}>
           <div style={{ fontSize: 12, color: TEXT2 }}>Análisis estratigráfico de calas de pintura</div>
-          <div style={{ fontSize: 10, color: GOLD, marginTop: 4 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS altimetría</div>
+          <div style={{ fontSize: 10, color: GOLD, marginTop: 4 }}>✦ MC 1,000,000 · P50 CIE-LAB · EXIF · MONTEA_COLOR</div>
           <div style={{ fontSize: 10, color: "#6699cc", marginTop: 2 }}>NCS · RAL · HEX · American Colors</div>
-          <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · MONTEA_COLOR · Sin cuenta requerida</div>
+          <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · Sin cuenta requerida</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
           <button style={{ ...btn(true), padding: "16px 24px", fontSize: 12 }} onClick={() => setScr("meta")}>
@@ -646,11 +638,14 @@ export default function App() {
           <span style={{ color: GOLD }}>{projRef.current || projD}</span> / {codeRef.current || codeD}
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
-          <button style={{ ...btn(!!gps, true), flexShrink: 0 }} onClick={fetchGPS}>
+          <button style={{ ...btn(!!gps, true), flexShrink: 0 }} onClick={fetchGPS}
+            title={gps?.acc === "EXIF" ? "Sobreescribir con GPS del dispositivo" : "Capturar ubicación GPS"}>
             {gps ? "📍 GPS ✓" : "📍 GPS"}
           </button>
           <span style={{ fontSize: 9, color: gps ? "#4cc87a" : MUTED, fontFamily: "monospace", lineHeight: 1.5 }}>
-            {gps ? `${gps.lat}, ${gps.lon} · Alt: ${gps.alt}` : gpsStatus || "—"}
+            {gps
+              ? `${gps.lat}, ${gps.lon} · Alt: ${gps.alt}${gps.acc === "EXIF" ? " · 📷 EXIF" : ` · ±${gps.acc}`}`
+              : gpsStatus || "Opcional — se obtiene automático del EXIF de la foto"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
@@ -675,7 +670,9 @@ export default function App() {
             <img src={imgData.url} alt="" style={{ maxWidth: "100%", maxHeight: 480, objectFit: "contain", borderRadius: 4, border: `1px solid ${BORDER}`, display: "block" }} />
             {imgMeta && (
               <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(200,169,110,.04)", border: `1px solid ${BORDER_GOLD}`, borderRadius: 3, fontFamily: "monospace", fontSize: 9, color: TEXT2, lineHeight: 2 }}>
-                <span style={{ color: GOLD }}>✦</span> {imgMeta.filename} · {imgMeta.filesize} · {imgMeta.size}<br />{imgMeta.datetime}
+                <span style={{ color: GOLD }}>✦</span> {imgMeta.filename} · {imgMeta.filesize} · {imgMeta.size}<br />
+                {imgMeta.datetime}
+                {gps?.acc === "EXIF" && <><br /><span style={{ color: "#4cc87a" }}>📍 {gps.lat}, {gps.lon} · Alt: {gps.alt} · EXIF</span></>}
               </div>
             )}
           </div>
