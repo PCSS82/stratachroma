@@ -11,10 +11,37 @@
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       html, body { background: #0d0c0a; color: #d4d0c0; min-height: 100vh; }
       #root { min-height: 100vh; }
+      #app-loader {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 16px;
+        font-family: 'Courier New', monospace;
+      }
+      #app-loader .brand {
+        font-size: 22px;
+        font-weight: 300;
+        color: #e8e4d4;
+        letter-spacing: .05em;
+      }
+      #app-loader .brand b { color: #c8a96e; }
+      #app-loader .sub {
+        font-size: 10px;
+        color: #666;
+        letter-spacing: .15em;
+        text-transform: uppercase;
+      }
     </style>
+    <script type="module" src="/src/main.jsx"></script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <div id="root">
+      <div id="app-loader">
+        <div class="brand">STRATA<b>CHROMA</b></div>
+        <div class="sub">Cargando…</div>
+      </div>
+    </div>
   </body>
 </html>
