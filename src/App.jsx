@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, memo, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, memo, useMemo } from "react";
 import { analyzeImage, rgbToLab } from "./motor.js";
 import { enrichLayer } from "./colors.js";
 
@@ -37,7 +37,6 @@ function rgbToHex({ r, g, b }) {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-// ─── MONTEA_COLOR ─────────────────────────────────────────────────────────────
 const MONTEA_DEFAULT = { r: 30, g: 45, b: 107 };
 
 function loadMonteaRef() {
@@ -66,7 +65,8 @@ function buildPDFHtml(proj, code, date, layers, imgUrl, meta, gps, notes, calibI
 body{font-family:'Courier New',monospace;padding:14px;font-size:8px;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .topbar{position:fixed;top:0;left:0;right:0;background:#111;padding:10px 16px;display:flex;gap:10px;z-index:999;box-shadow:0 2px 8px rgba(0,0,0,.4)}
 .topbar button{font-family:monospace;font-size:12px;padding:8px 18px;border:none;border-radius:3px;cursor:pointer;font-weight:700}
-.btn-print{background:#c8a96e;color:#111}.btn-close{background:#555;color:#fff}
+.btn-print{background:#c8a96e;color:#111}
+.btn-close{background:#555;color:#fff}
 .content{margin-top:52px}
 .hdr{display:flex;justify-content:space-between;border-bottom:2.5px solid #111;padding-bottom:10px;margin-bottom:10px}
 .brand{font-size:20px;font-weight:300}.brand b{color:#8B6914}.info{text-align:right;font-size:7px;line-height:2;color:#555}
@@ -94,7 +94,7 @@ tr:nth-child(even) td{background:#faf8f4}
 </div>
 <div class="content">
 <div class="hdr">
-  <div><div class="brand">STRATA<b>CHROMA</b></div><div style="font-size:6px;color:#aaa">FICHA TÉCNICA · CALA ESTRATIGRÁFICA · v21</div></div>
+  <div><div class="brand">STRATA<b>CHROMA</b></div><div style="font-size:6px;color:#aaa">FICHA TÉCNICA · CALA ESTRATIGRÁFICA · v20</div></div>
   <div class="info">Proyecto: <b>${proj}</b><br>Código: <b style="color:#8B6914">${code}</b><br>${date} · ${layers.length} capas<br>${now}</div>
 </div>
 <div class="mbox">
@@ -102,7 +102,7 @@ tr:nth-child(even) td{background:#faf8f4}
   <div><div class="mt">Fecha foto</div><div class="mv">${meta?.datetime || "—"}</div></div>
   <div><div class="mt">Dispositivo</div><div class="mv">${meta?.device || "—"}</div></div>
   <div class="gps">📍 Lat: <b>${gps?.lat || "N/A"}</b> &nbsp; Lon: <b>${gps?.lon || "N/A"}</b> &nbsp; Alt: <b>${gps?.alt || "N/A"}</b> &nbsp; Precisión: <b>${gps?.acc || "N/A"}</b></div>
-  ${calibInfo ? `<div class="calib">⚖ Calibración MONTEA_COLOR · Ref: ${calibInfo.refHex} · Medido: ${calibInfo.measHex} · ΔL:${calibInfo.dL} Δa:${calibInfo.da} Δb:${calibInfo.db}</div>` : ""}
+  ${calibInfo ? `<div class="calib">⚖ Calibración MONTEA_COLOR activa · Ref: ${calibInfo.refHex} · Medido: ${calibInfo.measHex} · ΔL:${calibInfo.dL} Δa:${calibInfo.da} Δb:${calibInfo.db}</div>` : ""}
 </div>
 <div class="strip">${layers.map(l => `<div style="background:${l.hex}"></div>`).join("")}</div>
 <div class="body">
@@ -118,22 +118,25 @@ ${layers.map(l => {
 ${hasNotes ? `<div class="notes-section"><h4>Observaciones de campo</h4><table><tr><th>#</th><th>Nota</th></tr>${notesRows}</table></div>` : ""}
 </div>
 </div>
-<div class="footer"><span>STRATACHROMA v21 · MC 1M P50 CIE-LAB · NCS · RAL · HEX · American Colors · MONTEA_COLOR</span><span>${now}</span></div>
-</div></body></html>`;
+<div class="footer"><span>STRATACHROMA v20 · MC 1M P50 CIE-LAB · NCS · RAL · HEX · American Colors · MONTEA_COLOR</span><span>${now}</span></div>
+</div>
+</body></html>`;
 }
 
 function openPDF(proj, code, date, layers, imgUrl, meta, gps, notes, calibInfo) {
   const html = buildPDFHtml(proj, code, date, layers, imgUrl, meta, gps, notes, calibInfo);
-  window.open(URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" })), "_blank");
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  window.open(URL.createObjectURL(blob), "_blank");
 }
 
 // ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
 const GOLD = "#c8a96e";
-const BG   = "#0d0c0a";
-const TEXT  = "#e8e4d4";
+const BG = "#0d0c0a";
+const BG2 = "#181614";
+const TEXT = "#e8e4d4";
 const TEXT2 = "#a09070";
 const MUTED = "#666";
-const BORDER      = "rgba(255,255,255,.1)";
+const BORDER = "rgba(255,255,255,.1)";
 const BORDER_GOLD = "rgba(200,169,110,.35)";
 
 const btn = (active, small) => ({
@@ -190,84 +193,66 @@ const Hdr = memo(({ back }) => (
   </div>
 ));
 
-// ─── SPEECH RECOGNITION ───────────────────────────────────────────────────────
-// Detecta soporte real del API
+// ─── SPEECH RECOGNITION HOOK ─────────────────────────────────────────────────
+// Usa continuous:false + auto-restart para máxima compatibilidad
+// (continuous:true se corta en iOS/Android; este patrón funciona en todos)
 function hasSpeechAPI() {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
-// Hook de reconocimiento de voz robusto
-// - continuous: false + auto-restart (más compatible con iOS/Android)
-// - interimResults: true  → muestra texto en tiempo real mientras hablas
-// - Maneja correctamente los errores "no-speech" y "aborted"
-// - abort() en vez de stop() para parada inmediata
-function useSpeechRecognition({ onFinal, onInterim, lang = "es-ES" }) {
-  const recRef   = useRef(null);
+function useSpeechRecognition({ onFinal, onInterim }) {
+  const recRef    = useRef(null);
   const activeRef = useRef(false);
   const timerRef  = useRef(null);
+  const fnRef     = useRef(null);
 
-  // La función listen vive en un ref para evitar closure stale
-  const listenFnRef = useRef(null);
-
+  // fnRef se actualiza cada render para evitar closures stale
   useEffect(() => {
-    listenFnRef.current = () => {
+    fnRef.current = () => {
       if (!activeRef.current || !hasSpeechAPI()) return;
-
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
       const rec = new SR();
-      rec.lang = lang;
-      rec.continuous = false;      // más fiable en todos los browsers
-      rec.interimResults = true;   // feedback en tiempo real
+      rec.lang            = "es-ES";
+      rec.continuous      = false;   // más fiable en todos los browsers
+      rec.interimResults  = true;    // texto en tiempo real
       rec.maxAlternatives = 1;
 
       rec.onresult = e => {
-        let finalText = "", interimText = "";
+        let final = "", interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) finalText += t;
-          else interimText += t;
+          if (e.results[i].isFinal) final   += e.results[i][0].transcript;
+          else                       interim += e.results[i][0].transcript;
         }
-        if (finalText.trim()) {
-          onFinal(finalText.trim());
-          onInterim("");
-        } else if (interimText) {
-          onInterim(interimText);
-        }
+        if (final.trim()) { onFinal(final.trim()); onInterim(""); }
+        else if (interim)   onInterim(interim);
       };
 
       rec.onend = () => {
         onInterim("");
-        if (activeRef.current) {
-          // Pequeña pausa antes de reiniciar para evitar errores de "already started"
-          timerRef.current = setTimeout(() => listenFnRef.current?.(), 200);
-        }
+        // Auto-restart mientras el usuario no haya detenido
+        if (activeRef.current)
+          timerRef.current = setTimeout(() => fnRef.current?.(), 200);
       };
 
       rec.onerror = e => {
-        // "no-speech" y "aborted" son normales — onend los maneja
-        if (e.error === "no-speech" || e.error === "aborted") return;
-
-        // Error real — informar y detener
         onInterim("");
+        if (e.error === "no-speech" || e.error === "aborted") return; // onend reiniciará
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           activeRef.current = false;
           alert(
             "Acceso al micrófono denegado.\n\n" +
             "Para activarlo:\n" +
-            "• Chrome: icono 🔒 en la barra → Micrófono → Permitir\n" +
-            "• Safari: Ajustes → Safari → Micrófono → Permitir\n" +
+            "• Chrome/Edge: icono 🔒 en la barra de dirección → Micrófono → Permitir\n" +
+            "• Safari iOS: Ajustes → Safari → Micrófono → Permitir\n" +
             "• Luego recarga la página."
           );
         }
-        // Para otros errores, onend reiniciará automáticamente
+        // Otros errores: onend se encargará del reinicio
       };
 
       recRef.current = rec;
-      try {
-        rec.start();
-      } catch {
-        // Si ya hay uno corriendo, esperar y reintentar
-        timerRef.current = setTimeout(() => listenFnRef.current?.(), 400);
+      try { rec.start(); } catch {
+        timerRef.current = setTimeout(() => fnRef.current?.(), 400);
       }
     };
   });
@@ -275,7 +260,7 @@ function useSpeechRecognition({ onFinal, onInterim, lang = "es-ES" }) {
   const start = useCallback(() => {
     if (!hasSpeechAPI()) {
       alert(
-        "Reconocimiento de voz no disponible en este navegador.\n\n" +
+        "Reconocimiento de voz no disponible.\n\n" +
         "Navegadores compatibles:\n" +
         "• Chrome (desktop o Android) ✓\n" +
         "• Safari (iOS 14.5+ / macOS) ✓\n" +
@@ -284,7 +269,7 @@ function useSpeechRecognition({ onFinal, onInterim, lang = "es-ES" }) {
       return false;
     }
     activeRef.current = true;
-    listenFnRef.current?.();
+    fnRef.current?.();
     return true;
   }, []);
 
@@ -296,7 +281,6 @@ function useSpeechRecognition({ onFinal, onInterim, lang = "es-ES" }) {
     recRef.current = null;
   }, [onInterim]);
 
-  // Limpieza al desmontar
   useEffect(() => () => {
     activeRef.current = false;
     clearTimeout(timerRef.current);
@@ -306,7 +290,7 @@ function useSpeechRecognition({ onFinal, onInterim, lang = "es-ES" }) {
   return { start, stop };
 }
 
-// ─── MODAL DOCUMENTACIÓN DE CAPA ─────────────────────────────────────────────
+// ─── MODAL DOCUMENTACIÓN ──────────────────────────────────────────────────────
 const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose }) => {
   const [note, setNote]       = useState(initialNote || "");
   const [interim, setInterim] = useState("");
@@ -325,26 +309,17 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
   const lum = (r * 299 + g * 587 + b * 114) / 1000;
   const fg  = lum > 140 ? "#111" : "#fff";
 
-  const toggleRecording = () => {
-    if (recording) {
-      stop();
-      setRecording(false);
-    } else {
-      const ok = start();
-      if (ok) setRecording(true);
-    }
+  const toggle = () => {
+    if (recording) { stop(); setRecording(false); }
+    else { if (start()) setRecording(true); }
   };
 
-  // Detener al cerrar el modal
-  useEffect(() => () => { if (recording) stop(); }, []);
+  useEffect(() => () => stop(), []); // limpieza al desmontar
 
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={e => { if (e.target === e.currentTarget) { stop(); onClose(); } }}>
       <div style={{ background: "#141210", border: `1px solid ${BORDER_GOLD}`, borderRadius: "12px 12px 0 0", width: "100%", maxWidth: 560, padding: "24px 20px 36px", maxHeight: "85vh", overflowY: "auto" }}>
-
-        {/* Cabecera de capa */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
           <div style={{ width: 52, height: 52, background: layer.hex, borderRadius: 6, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <span style={{ color: fg, fontSize: 5.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)" }}>{layer.hex}</span>
@@ -357,7 +332,6 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
           <button onClick={() => { stop(); onClose(); }} style={{ marginLeft: "auto", background: "none", border: "none", color: MUTED, fontSize: 20, cursor: "pointer", padding: "0 4px" }}>✕</button>
         </div>
 
-        {/* Área de texto */}
         <label style={lbl}>Observaciones de campo</label>
         <textarea
           value={note}
@@ -369,63 +343,40 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
 
         {/* Texto en tiempo real del reconocedor */}
         {interim && (
-          <div style={{ marginTop: 6, padding: "6px 10px", background: "rgba(200,169,110,.06)", border: `1px solid ${BORDER_GOLD}`, borderRadius: 3, fontSize: 12, color: TEXT2, fontFamily: "monospace", fontStyle: "italic", lineHeight: 1.5 }}>
+          <div style={{ marginTop: 6, padding: "6px 10px", background: "rgba(200,169,110,.06)", border: `1px solid ${BORDER_GOLD}`, borderRadius: 3, fontSize: 12, color: TEXT2, fontFamily: "monospace", fontStyle: "italic" }}>
             {interim}…
           </div>
         )}
 
-        {/* Controles de voz */}
         <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
           <button
-            onClick={toggleRecording}
-            style={{
-              ...btn(recording, false),
-              padding: "12px 20px",
-              fontSize: 11,
-              minWidth: 150,
+            onClick={toggle}
+            style={{ ...btn(recording, false), padding: "12px 20px", fontSize: 11, minWidth: 150,
               background: recording ? "rgba(180,60,60,.2)" : "rgba(255,255,255,.05)",
               borderColor: recording ? "rgba(220,80,80,.5)" : BORDER,
-              color: recording ? "#e07070" : TEXT2,
-            }}>
+              color: recording ? "#e07070" : TEXT2 }}>
             {recording ? "⏹ Detener voz" : "🎙 Dictar nota"}
           </button>
-
-          {recording && (
-            <span style={{ fontSize: 9, color: "#e07070", fontFamily: "monospace", animation: "blink 1s ease-in-out infinite" }}>
-              ● Escuchando…
-            </span>
-          )}
-
-          {note && !recording && (
-            <button onClick={() => setNote("")} style={{ ...btn(false, true), fontSize: 9, color: TEXT2 }}>
-              ✕ Limpiar
-            </button>
-          )}
+          {recording && <span style={{ fontSize: 9, color: "#e07070", fontFamily: "monospace", animation: "blink 1s ease-in-out infinite" }}>● Escuchando…</span>}
+          {note && !recording && <button onClick={() => setNote("")} style={{ ...btn(false, true), fontSize: 9 }}>✕ Limpiar</button>}
         </div>
 
-        {/* Compatibilidad info */}
         {!hasSpeechAPI() && (
           <div style={{ marginTop: 10, fontSize: 9, color: "#e07870", fontFamily: "monospace", padding: "6px 10px", background: "rgba(180,60,60,.08)", borderRadius: 3 }}>
             ⚠ Voz no disponible en este navegador — escribe manualmente o usa Chrome/Safari
           </div>
         )}
 
-        {/* Guardar / Cancelar */}
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button
             onClick={() => { stop(); onSave(layerIndex, note.trim()); onClose(); }}
             style={{ ...btn(true), flex: 1, padding: "14px", fontSize: 12 }}>
             ✓ Guardar nota
           </button>
-          <button onClick={() => { stop(); onClose(); }} style={{ ...btn(false), padding: "14px 20px", fontSize: 11 }}>
-            Cancelar
-          </button>
+          <button onClick={() => { stop(); onClose(); }} style={{ ...btn(false), padding: "14px 20px", fontSize: 11 }}>Cancelar</button>
         </div>
       </div>
-
-      <style>{`
-        @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:1} }
-      `}</style>
+      <style>{`@keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}`}</style>
     </div>
   );
 });
@@ -433,15 +384,13 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
 // ─── FILA DE CAPA ─────────────────────────────────────────────────────────────
 const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote }) => {
   const { r, g, b } = layer.rgb;
-  const lum = (r * 299 + g * 587 + b * 114) / 1000;
-  const fg  = lum > 140 ? "#111" : "#fff";
+  const lum = (r * 299 + g * 587 + b * 114) / 1000, fg = lum > 140 ? "#111" : "#fff";
   return (
     <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
       <td style={{ padding: "8px 10px", color: GOLD, fontWeight: 900, fontSize: 16, width: 36, textAlign: "center" }}>{layer.pos}</td>
       <td style={{ padding: "8px 6px", width: 54 }}>
-        <div
-          onClick={() => onOpenNote(layerIndex)}
-          title={hasNote ? "Nota guardada — toca para editar" : "Toca para documentar esta capa"}
+        <div onClick={() => onOpenNote(layerIndex)}
+          title={hasNote ? "Nota guardada — clic para editar" : "Clic para documentar esta capa"}
           style={{ position: "relative", width: 40, height: 40, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(80,200,120,.6)" : "rgba(200,100,50,.5)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ color: fg, fontSize: 5.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{layer.hex}</span>
           <div style={{ position: "absolute", top: -5, right: -5, width: 12, height: 12, borderRadius: "50%", background: hasNote ? "#4cc87a" : "#e07840", border: `2px solid ${BG}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -476,93 +425,97 @@ const Wrap = ({ children, back }) => (
       ::-webkit-scrollbar-thumb{background:rgba(200,169,110,.2)}
       input,textarea{-webkit-tap-highlight-color:transparent;-webkit-appearance:none}
       @keyframes pulse{0%,100%{opacity:.07}50%{opacity:.7}}
+      @keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}
     `}</style>
   </div>
 );
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [scr, setScr]     = useState("home");
+  const [scr, setScr] = useState("home");
   const projRef = useRef(""), codeRef = useRef("");
   const [projD, setProjD] = useState(""), [codeD, setCodeD] = useState("");
-  const [imgData, setImgData]   = useState(null);
-  const [layers, setLayers]     = useState([]);
-  const [status, setStatus]     = useState(""), [err, setErr] = useState(null);
-  const [gps, setGps]           = useState(null), [gpsStatus, setGpsStatus] = useState("");
-  const [copied, setCopied]     = useState(null);
+  const [imgData, setImgData] = useState(null);
+  const [layers, setLayers] = useState([]);
+  const [status, setStatus] = useState(""), [err, setErr] = useState(null);
+  const [gps, setGps] = useState(null), [gpsStatus, setGpsStatus] = useState("");
+  const [copied, setCopied] = useState(null);
   const fRef = useRef(), cRef = useRef(), imgFileRef = useRef(null);
-  const [imgMeta, setImgMeta]   = useState(null);
+  const [imgMeta, setImgMeta] = useState(null);
   const today = new Date().toISOString().slice(0, 10);
 
-  const [layerNotes, setLayerNotes]         = useState({});
+  const [layerNotes, setLayerNotes] = useState({});
   const [activeNoteLayer, setActiveNoteLayer] = useState(null);
 
-  const [monteaRef, setMonteaRef]   = useState(loadMonteaRef);
-  const [measHex, setMeasHex]       = useState("#1e2d6b");
+  const [monteaRef, setMonteaRef] = useState(loadMonteaRef);
+  const [measHex, setMeasHex] = useState("#1e2d6b");
   const [calibActive, setCalibActive] = useState(false);
-  const [showCalib, setShowCalib]   = useState(false);
+  const [showCalib, setShowCalib] = useState(false);
   const [editingRef, setEditingRef] = useState(false);
 
   const refHex = useMemo(() => rgbToHex(monteaRef), [monteaRef]);
 
   const activeLayers = useMemo(() => {
     if (!calibActive) return layers;
-    const h2r = h => { const v = parseInt(h.replace("#",""),16); return {r:(v>>16)&255,g:(v>>8)&255,b:v&255}; };
-    const meas = h2r(measHex);
-    const refLAB  = rgbToLab(monteaRef.r, monteaRef.g, monteaRef.b);
+    const hexToRgb = h => { const v = parseInt(h.replace("#", ""), 16); return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 }; };
+    const meas = hexToRgb(measHex);
+    const refLAB = rgbToLab(monteaRef.r, monteaRef.g, monteaRef.b);
     const measLAB = rgbToLab(meas.r, meas.g, meas.b);
-    const dL = refLAB[0]-measLAB[0], da = refLAB[1]-measLAB[1], db = refLAB[2]-measLAB[2];
+    const dL = refLAB[0] - measLAB[0], da = refLAB[1] - measLAB[1], db = refLAB[2] - measLAB[2];
     return layers.map(layer => {
-      const lab = layer.lab || {L:50,a:0,b:0};
-      const cr  = labToRgb(lab.L+dL, lab.a+da, lab.b+db);
-      return enrichLayer({...layer, rgb:cr, hex:rgbToHex(cr), lab:{L:lab.L+dL,a:lab.a+da,b:lab.b+db}});
+      const lab = layer.lab || { L: 50, a: 0, b: 0 };
+      const corrRgb = labToRgb(lab.L + dL, lab.a + da, lab.b + db);
+      return enrichLayer({ ...layer, rgb: corrRgb, hex: rgbToHex(corrRgb), lab: { L: lab.L + dL, a: lab.a + da, b: lab.b + db } });
     });
   }, [layers, calibActive, measHex, monteaRef]);
 
   const calibInfo = useMemo(() => {
     if (!calibActive) return null;
-    const h2r = h => { const v = parseInt(h.replace("#",""),16); return {r:(v>>16)&255,g:(v>>8)&255,b:v&255}; };
-    const meas = h2r(measHex);
-    const refLAB  = rgbToLab(monteaRef.r, monteaRef.g, monteaRef.b);
+    const hexToRgb = h => { const v = parseInt(h.replace("#", ""), 16); return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 }; };
+    const meas = hexToRgb(measHex);
+    const refLAB = rgbToLab(monteaRef.r, monteaRef.g, monteaRef.b);
     const measLAB = rgbToLab(meas.r, meas.g, meas.b);
-    return { refHex, measHex, dL:(refLAB[0]-measLAB[0]).toFixed(1), da:(refLAB[1]-measLAB[1]).toFixed(1), db:(refLAB[2]-measLAB[2]).toFixed(1) };
+    return { refHex, measHex, dL: (refLAB[0] - measLAB[0]).toFixed(1), da: (refLAB[1] - measLAB[1]).toFixed(1), db: (refLAB[2] - measLAB[2]).toFixed(1) };
   }, [calibActive, measHex, monteaRef, refHex]);
 
   const allDocumented = useMemo(() =>
-    activeLayers.length > 0 && activeLayers.every((_, i) => (layerNotes[i]||"").trim().length > 0),
+    activeLayers.length > 0 && activeLayers.every((_, i) => (layerNotes[i] || "").trim().length > 0),
     [activeLayers, layerNotes]);
 
   const docCount = useMemo(() =>
-    activeLayers.filter((_, i) => (layerNotes[i]||"").trim().length > 0).length,
+    activeLayers.filter((_, i) => (layerNotes[i] || "").trim().length > 0).length,
     [activeLayers, layerNotes]);
 
   const reset = () => {
-    setImgData(null); setLayers([]); setStatus(""); setErr(null);
-    setGps(null); setGpsStatus(""); setCopied(null); setImgMeta(null);
-    imgFileRef.current = null; setLayerNotes({}); setActiveNoteLayer(null);
-    setCalibActive(false); setShowCalib(false);
+    setImgData(null); setLayers([]); setStatus(""); setErr(null); setGps(null); setGpsStatus("");
+    setCopied(null); setImgMeta(null); imgFileRef.current = null;
+    setLayerNotes({}); setActiveNoteLayer(null); setCalibActive(false); setShowCalib(false);
   };
 
   const home = () => { setScr("home"); reset(); };
-  const copyVal = v => { navigator.clipboard?.writeText(v); setCopied(v); setTimeout(()=>setCopied(null),1500); };
-  const saveNote = (idx, text) => setLayerNotes(prev => ({...prev,[idx]:text}));
+  const copyVal = v => { navigator.clipboard?.writeText(v); setCopied(v); setTimeout(() => setCopied(null), 1500); };
+  const saveNote = (idx, text) => setLayerNotes(prev => ({ ...prev, [idx]: text }));
 
-  // GPS al montar
   useEffect(() => {
     if (!navigator.geolocation) return;
     setGpsStatus("Obteniendo GPS…");
     navigator.geolocation.getCurrentPosition(
       p => {
-        const pos = { lat:p.coords.latitude.toFixed(6), lon:p.coords.longitude.toFixed(6), alt:p.coords.altitude?p.coords.altitude.toFixed(1)+"m":"N/A", acc:p.coords.accuracy?p.coords.accuracy.toFixed(0)+"m":"N/A" };
+        const pos = {
+          lat: p.coords.latitude.toFixed(6),
+          lon: p.coords.longitude.toFixed(6),
+          alt: p.coords.altitude ? p.coords.altitude.toFixed(1) + "m" : "N/A",
+          acc: p.coords.accuracy ? p.coords.accuracy.toFixed(0) + "m" : "N/A",
+        };
         setGps(pos); setGpsStatus(`📍 ${pos.lat}, ${pos.lon}`);
       },
       () => setGpsStatus("GPS: permite acceso"),
-      { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
   const pick = useCallback(async file => {
-    if (!file?.type.startsWith("image/")) { setErr("El archivo no es una imagen"); return; }
+    if (!file?.type.startsWith("image/")) { setErr("Archivo no es imagen"); return; }
     setErr(null); setStatus("Leyendo…"); imgFileRef.current = file;
     const reader = new FileReader();
     reader.onload = ev => {
@@ -572,10 +525,10 @@ export default function App() {
         datetime: new Date(file.lastModified).toLocaleString("es"),
         device: navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.split(";")?.[1]?.trim() || navigator.platform || "—",
         filename: file.name,
-        filesize: `${(file.size/1024).toFixed(1)} KB`,
+        filesize: `${(file.size / 1024).toFixed(1)} KB`,
       });
       img.src = ev.target.result;
-      setImgData({ url:ev.target.result, b64:ev.target.result.split(",")[1], mime:file.type, file });
+      setImgData({ url: ev.target.result, b64: ev.target.result.split(",")[1], mime: file.type, file });
       setStatus("✓ Lista");
     };
     reader.readAsDataURL(file);
@@ -602,35 +555,35 @@ export default function App() {
 
   const dlPDF = () => {
     if (!allDocumented) {
-      const m = activeLayers.map((_,i)=>(layerNotes[i]||"").trim()?null:i+1).filter(Boolean);
-      alert(`⚠ Documenta todas las capas antes de exportar.\nFaltan: ${m.join(", ")}`);
+      const missing = activeLayers.map((_, i) => (layerNotes[i] || "").trim() ? null : i + 1).filter(Boolean);
+      alert(`⚠ Documenta todas las capas antes de exportar.\nCapas pendientes: ${missing.join(", ")}`);
       return;
     }
-    const p = projRef.current||projD, c = codeRef.current||codeD;
+    const p = projRef.current || projD, c = codeRef.current || codeD;
     openPDF(p, c, today, activeLayers, imgData?.url, imgMeta, gps, layerNotes, calibInfo);
   };
 
   const dlCSV = () => {
     if (!allDocumented) {
-      const m = activeLayers.map((_,i)=>(layerNotes[i]||"").trim()?null:i+1).filter(Boolean);
-      alert(`⚠ Documenta todas las capas antes de exportar.\nFaltan: ${m.join(", ")}`);
+      const missing = activeLayers.map((_, i) => (layerNotes[i] || "").trim() ? null : i + 1).filter(Boolean);
+      alert(`⚠ Documenta todas las capas antes de exportar.\nCapas pendientes: ${missing.join(", ")}`);
       return;
     }
-    const p = projRef.current||projD, c = codeRef.current||codeD;
+    const p = projRef.current || projD, c = codeRef.current || codeD;
     const csv = [
-      `# STRATACHROMA v21 | ${p} | ${c} | ${today}`,
-      `# GPS: Lat:${gps?.lat||"N/A"} Lon:${gps?.lon||"N/A"} Alt:${gps?.alt||"N/A"}`,
-      calibInfo ? `# MONTEA_COLOR: Ref ${calibInfo.refHex} / Medido ${calibInfo.measHex} / ΔL${calibInfo.dL} Δa${calibInfo.da} Δb${calibInfo.db}` : "",
+      `# STRATACHROMA v20 | ${p} | ${c} | ${today}`,
+      `# GPS: Lat:${gps?.lat || "N/A"} Lon:${gps?.lon || "N/A"} Alt:${gps?.alt || "N/A"}`,
+      calibInfo ? `# Calibración MONTEA_COLOR: Ref ${calibInfo.refHex} / Medido ${calibInfo.measHex} / ΔL${calibInfo.dL} Δa${calibInfo.da} Δb${calibInfo.db}` : "",
       "Capa,Nombre,HEX,NCS,RAL,dE,American,R,G,B,Notas",
-      ...activeLayers.map((l,i)=>`${l.pos},"${l.name}",${l.hex},"${l.ncs}","${l.ral}",${l.ralDE},"${l.american}",${l.rgb.r},${l.rgb.g},${l.rgb.b},"${(layerNotes[i]||"").replace(/"/g,"'")}"`)
+      ...activeLayers.map((l, i) => `${l.pos},"${l.name}",${l.hex},"${l.ncs}","${l.ral}",${l.ralDE},"${l.american}",${l.rgb.r},${l.rgb.g},${l.rgb.b},"${(layerNotes[i] || "").replace(/"/g, "'")}"`)
     ].filter(Boolean).join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"}));
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     a.download = `${p}_${c}_${today}.csv`;
     a.click();
   };
 
-  // ── HOME ────────────────────────────────────────────────────────────────────
+  // ── HOME ──────────────────────────────────────────────────────────────────
   if (scr === "home") return (
     <Wrap>
       <div style={{ padding: "40px 24px", maxWidth: 460 }}>
@@ -639,20 +592,22 @@ export default function App() {
             {gps ? `📍 ${gps.lat}, ${gps.lon} · Alt: ${gps.alt}` : `⏳ ${gpsStatus}`}
           </div>
         )}
-        <div style={{ fontFamily: "monospace", marginBottom: 36, lineHeight: 2 }}>
+        <div style={{ fontFamily: "monospace", marginBottom: 36, lineHeight: 1.9 }}>
           <div style={{ fontSize: 12, color: TEXT2 }}>Análisis estratigráfico de calas de pintura</div>
           <div style={{ fontSize: 10, color: GOLD, marginTop: 4 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS altimetría</div>
           <div style={{ fontSize: 10, color: "#6699cc", marginTop: 2 }}>NCS · RAL · HEX · American Colors</div>
-          <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · MONTEA_COLOR · Notas de voz · Sin cuenta requerida</div>
+          <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · MONTEA_COLOR · Sin cuenta requerida</div>
         </div>
-        <button style={{ ...btn(true), padding: "16px 28px", fontSize: 12 }} onClick={() => setScr("meta")}>
-          + Nueva Cala
-        </button>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
+          <button style={{ ...btn(true), padding: "16px 24px", fontSize: 12 }} onClick={() => setScr("meta")}>
+            + Nueva Cala
+          </button>
+        </div>
       </div>
     </Wrap>
   );
 
-  // ── META ────────────────────────────────────────────────────────────────────
+  // ── META ──────────────────────────────────────────────────────────────────
   if (scr === "meta") return (
     <Wrap back={home}>
       <div style={{ padding: "28px 24px", maxWidth: 460 }}>
@@ -673,7 +628,7 @@ export default function App() {
         </div>
         <button style={{ ...btn(true), width: "100%", padding: "15px", fontSize: 12 }}
           onClick={() => {
-            const p = projRef.current||projD, c = codeRef.current||codeD;
+            const p = projRef.current || projD, c = codeRef.current || codeD;
             if (p && c) setScr("capture");
             else alert("Completa los dos campos");
           }}>
@@ -683,40 +638,38 @@ export default function App() {
     </Wrap>
   );
 
-  // ── CAPTURE ─────────────────────────────────────────────────────────────────
+  // ── CAPTURE ───────────────────────────────────────────────────────────────
   if (scr === "capture") return (
     <Wrap back={() => setScr("meta")}>
       <div style={{ padding: "20px 24px", maxWidth: 560 }}>
         <div style={{ fontSize: 10, color: TEXT2, fontFamily: "monospace", marginBottom: 16 }}>
-          <span style={{ color: GOLD }}>{projRef.current||projD}</span> / {codeRef.current||codeD}
+          <span style={{ color: GOLD }}>{projRef.current || projD}</span> / {codeRef.current || codeD}
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
           <button style={{ ...btn(!!gps, true), flexShrink: 0 }} onClick={fetchGPS}>
             {gps ? "📍 GPS ✓" : "📍 GPS"}
           </button>
-          <span style={{ fontSize: 9, color: gps ? "#4cc87a" : MUTED, fontFamily: "monospace" }}>
+          <span style={{ fontSize: 9, color: gps ? "#4cc87a" : MUTED, fontFamily: "monospace", lineHeight: 1.5 }}>
             {gps ? `${gps.lat}, ${gps.lon} · Alt: ${gps.alt}` : gpsStatus || "—"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
           <button style={btn(false, true)} onClick={() => fRef.current?.click()}>📁 Archivo</button>
           <button style={btn(false, true)} onClick={() => cRef.current?.click()}>📷 Cámara</button>
-          {imgData && <button style={btn(false, true)} onClick={() => { setImgData(null); setStatus(""); setImgMeta(null); imgFileRef.current=null; }}>✕ Quitar</button>}
+          {imgData && <button style={btn(false, true)} onClick={() => { setImgData(null); setStatus(""); setImgMeta(null); imgFileRef.current = null; }}>✕ Quitar</button>}
         </div>
-        <input ref={fRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e=>pick(e.target.files[0])} />
-        <input ref={cRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e=>pick(e.target.files[0])} />
-
+        <input ref={fRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => pick(e.target.files[0])} />
+        <input ref={cRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={e => pick(e.target.files[0])} />
         {!imgData && (
           <div
             onClick={() => fRef.current?.click()}
-            onDragOver={e=>e.preventDefault()}
-            onDrop={e=>{e.preventDefault();pick(e.dataTransfer.files[0]);}}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); pick(e.dataTransfer.files[0]); }}
             style={{ border: `1px dashed ${BORDER}`, borderRadius: 6, padding: "60px 20px", textAlign: "center", cursor: "pointer", color: MUTED, fontFamily: "monospace", fontSize: 12, marginBottom: 16 }}>
             Arrastra imagen de cala aquí
             <div style={{ fontSize: 10, marginTop: 10, color: TEXT2 }}>MC 1M P50 CIE-LAB</div>
           </div>
         )}
-
         {imgData && (
           <div style={{ marginBottom: 16 }}>
             <img src={imgData.url} alt="" style={{ maxWidth: "100%", maxHeight: 480, objectFit: "contain", borderRadius: 4, border: `1px solid ${BORDER}`, display: "block" }} />
@@ -727,10 +680,8 @@ export default function App() {
             )}
           </div>
         )}
-
         {status && <div style={{ padding: "10px 14px", background: "rgba(200,169,110,.04)", border: `1px solid ${BORDER_GOLD}`, borderRadius: 3, fontSize: 10, color: GOLD, fontFamily: "monospace", marginBottom: 12 }}>{status}</div>}
-        {err    && <div style={{ padding: 12, background: "rgba(180,60,60,.08)", border: "1px solid rgba(180,60,60,.2)", borderRadius: 3, fontSize: 10, color: "#c87a7a", fontFamily: "monospace", marginBottom: 12 }}>⚠ {err}</div>}
-
+        {err && <div style={{ padding: 12, background: "rgba(180,60,60,.08)", border: "1px solid rgba(180,60,60,.2)", borderRadius: 3, fontSize: 10, color: "#c87a7a", fontFamily: "monospace", marginBottom: 12 }}>⚠ {err}</div>}
         <button style={{ ...btn(true), width: "100%", padding: 16, fontSize: 12, opacity: imgData ? 1 : .4 }}
           onClick={() => { if (imgData) analyze(); }}>
           → Analizar · MC 1M P50 CIE-LAB
@@ -739,28 +690,27 @@ export default function App() {
     </Wrap>
   );
 
-  // ── ANALYZING ───────────────────────────────────────────────────────────────
+  // ── ANALYZING ─────────────────────────────────────────────────────────────
   if (scr === "analyzing") return (
     <div style={{ minHeight: "100vh", background: BG, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 22 }}>
       <div style={{ fontSize: 11, color: TEXT2, fontFamily: "monospace", letterSpacing: "0.2em", textTransform: "uppercase" }}>
         Procesando estratigrafía
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, width: 280 }}>
-        {[...Array(14)].map((_,i) => (
-          <div key={i} style={{ height: 6, borderRadius: 1, background:`rgba(200,169,110,${0.08+(i/14)*0.14})`, animation:`pulse 1.8s ease-in-out ${i*.11}s infinite` }} />
+        {[...Array(14)].map((_, i) => (
+          <div key={i} style={{ height: 6, borderRadius: 1, background: `rgba(200,169,110,${0.08 + (i / 14) * 0.12})`, animation: `pulse 1.8s ease-in-out ${i * .11}s infinite` }} />
         ))}
       </div>
       {status && <div style={{ fontSize: 10, color: GOLD, fontFamily: "monospace", textAlign: "center", maxWidth: 380, lineHeight: 2.2, padding: "0 24px" }}>{status}</div>}
     </div>
   );
 
-  // ── RESULT ──────────────────────────────────────────────────────────────────
+  // ── RESULT ────────────────────────────────────────────────────────────────
   if (scr === "result") {
-    const p = projRef.current||projD, c = codeRef.current||codeD;
+    const p = projRef.current || projD, c = codeRef.current || codeD;
     return (
       <Wrap back={home}>
         <div style={{ padding: "16px 20px" }}>
-
           <div style={{ marginBottom: 12 }}>
             <span style={{ fontSize: 14, color: GOLD, fontFamily: "monospace", fontWeight: 700 }}>{p}</span>
             <span style={{ fontSize: 10, color: TEXT2, fontFamily: "monospace" }}> / {c}</span>
@@ -773,13 +723,13 @@ export default function App() {
             </div>
           )}
 
-          {/* MONTEA_COLOR */}
+          {/* MONTEA_COLOR calibración */}
           <div style={{ marginBottom: 12, border: `1px solid ${BORDER_GOLD}`, borderRadius: 4, overflow: "hidden" }}>
             <button onClick={() => setShowCalib(v => !v)}
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: calibActive ? "rgba(200,169,110,.08)" : "rgba(255,255,255,.02)", border: "none", cursor: "pointer", textAlign: "left" }}>
               <div style={{ width: 20, height: 20, background: refHex, borderRadius: 3, border: `1px solid ${BORDER}`, flexShrink: 0 }} />
               <span style={{ fontSize: 9, color: GOLD, fontFamily: "monospace", letterSpacing: ".1em", textTransform: "uppercase" }}>MONTEA_COLOR</span>
-              {calibActive && <span style={{ fontSize: 8, color: "#4cc87a", fontFamily: "monospace", marginLeft: 4 }}>● Activa</span>}
+              {calibActive && <span style={{ fontSize: 8, color: "#4cc87a", fontFamily: "monospace", marginLeft: 4 }}>● Calibración activa</span>}
               <span style={{ fontSize: 9, color: MUTED, marginLeft: "auto" }}>{showCalib ? "▲" : "▼"}</span>
             </button>
             {showCalib && (
@@ -788,7 +738,7 @@ export default function App() {
                   El color de control MONTEA_COLOR corrige la variación de iluminación.<br />
                   Indica cómo aparece este azul en tu foto para calibrar todas las capas.
                 </div>
-                <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
                   <div>
                     <div style={{ fontSize: 8, color: MUTED, fontFamily: "monospace", marginBottom: 4 }}>COLOR REFERENCIA</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -799,17 +749,17 @@ export default function App() {
                           <input type="color" defaultValue={refHex}
                             onChange={e => {
                               const hex = e.target.value;
-                              const v = parseInt(hex.replace("#",""),16);
-                              const nr = {r:(v>>16)&255,g:(v>>8)&255,b:v&255};
-                              setMonteaRef(nr);
-                              localStorage.setItem("sc_montea_color",JSON.stringify(nr));
+                              const v = parseInt(hex.replace("#", ""), 16);
+                              const newRef = { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+                              setMonteaRef(newRef);
+                              localStorage.setItem("sc_montea_color", JSON.stringify(newRef));
                             }}
-                            style={{ width:40, height:32, border:"none", borderRadius:3, cursor:"pointer", padding:2 }} />
-                          <button onClick={() => setEditingRef(false)} style={{ ...btn(false,true), fontSize:9 }}>OK</button>
-                          <button onClick={() => { setMonteaRef(MONTEA_DEFAULT); localStorage.setItem("sc_montea_color",JSON.stringify(MONTEA_DEFAULT)); setEditingRef(false); }} style={{ ...btn(false,true), fontSize:9, color:TEXT2 }}>Reset</button>
+                            style={{ width: 40, height: 32, border: "none", borderRadius: 3, cursor: "pointer", padding: 2 }} />
+                          <button onClick={() => setEditingRef(false)} style={{ ...btn(false, true), fontSize: 9 }}>OK</button>
+                          <button onClick={() => { setMonteaRef(MONTEA_DEFAULT); localStorage.setItem("sc_montea_color", JSON.stringify(MONTEA_DEFAULT)); setEditingRef(false); }} style={{ ...btn(false, true), fontSize: 9, color: TEXT2 }}>Reset</button>
                         </div>
                       ) : (
-                        <button onClick={() => setEditingRef(true)} style={{ ...btn(false,true), fontSize:9 }}>Cambiar</button>
+                        <button onClick={() => setEditingRef(true)} style={{ ...btn(false, true), fontSize: 9 }}>Cambiar</button>
                       )}
                     </div>
                   </div>
@@ -819,7 +769,7 @@ export default function App() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 32, height: 32, background: measHex, borderRadius: 4, border: `1px solid ${BORDER}` }} />
                       <input type="color" value={measHex} onChange={e => setMeasHex(e.target.value)}
-                        style={{ width:40, height:32, border:"none", borderRadius:3, cursor:"pointer", padding:2 }} />
+                        style={{ width: 40, height: 32, border: "none", borderRadius: 3, cursor: "pointer", padding: 2 }} />
                       <span style={{ fontSize: 9, color: TEXT2, fontFamily: "monospace" }}>{measHex.toUpperCase()}</span>
                     </div>
                   </div>
@@ -830,16 +780,17 @@ export default function App() {
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 10 }}>
-                  {!calibActive
-                    ? <button onClick={() => setCalibActive(true)} style={{ ...btn(true,true), fontSize:10, padding:"10px 16px" }}>⚖ Aplicar calibración</button>
-                    : <button onClick={() => setCalibActive(false)} style={{ ...btn(false,true), fontSize:10, padding:"10px 16px", color:"#e07070", borderColor:"rgba(200,80,80,.3)" }}>✕ Desactivar</button>
-                  }
+                  {!calibActive ? (
+                    <button onClick={() => setCalibActive(true)} style={{ ...btn(true, true), fontSize: 10, padding: "10px 16px" }}>⚖ Aplicar calibración</button>
+                  ) : (
+                    <button onClick={() => setCalibActive(false)} style={{ ...btn(false, true), fontSize: 10, padding: "10px 16px", color: "#e07070", borderColor: "rgba(200,80,80,.3)" }}>✕ Desactivar</button>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Progreso de documentación */}
+          {/* Documentación progress */}
           <div style={{ marginBottom: 12, padding: "10px 14px", background: allDocumented ? "rgba(60,180,80,.07)" : "rgba(200,169,110,.04)", border: `1px solid ${allDocumented ? "rgba(60,180,80,.3)" : BORDER_GOLD}`, borderRadius: 4, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 9, color: allDocumented ? "#4cc87a" : GOLD, fontFamily: "monospace", letterSpacing: ".08em" }}>
@@ -850,29 +801,29 @@ export default function App() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 3, flexWrap: "wrap", maxWidth: 80, justifyContent: "flex-end" }}>
-              {activeLayers.map((_,i) => (
+              {activeLayers.map((_, i) => (
                 <div key={i} onClick={() => setActiveNoteLayer(i)}
-                  style={{ width:10, height:10, borderRadius:"50%", background:(layerNotes[i]||"").trim()?"#4cc87a":"#e07840", cursor:"pointer", border:"1px solid rgba(0,0,0,.2)" }} />
+                  style={{ width: 10, height: 10, borderRadius: "50%", background: (layerNotes[i] || "").trim() ? "#4cc87a" : "#e07840", cursor: "pointer", border: "1px solid rgba(0,0,0,.2)" }} />
               ))}
             </div>
           </div>
 
           {/* Franja de colores */}
           <div style={{ display: "flex", height: 20, borderRadius: 3, overflow: "hidden", marginBottom: 12, border: `1px solid ${BORDER}` }}>
-            {activeLayers.map((l,i) => <div key={i} style={{ flex:1, background:l.hex }} title={`C${l.pos}: ${l.name}`} />)}
+            {activeLayers.map((l, i) => <div key={i} style={{ flex: 1, background: l.hex }} title={`C${l.pos}: ${l.name}`} />)}
           </div>
           <div style={{ fontSize: 8, color: GOLD, fontFamily: "monospace", marginBottom: 14 }}>
             ✦ MC 1M P50 CIE-LAB · {activeLayers.length} capas{calibActive ? " · ⚖ MONTEA_COLOR calibrado" : ""}
-            {copied && <span style={{ marginLeft:10 }}>✓ {copied}</span>}
+            {copied && <span style={{ marginLeft: 10 }}>✓ {copied}</span>}
           </div>
 
           {/* Tabla */}
           <div style={{ display: "grid", gridTemplateColumns: imgData ? "min(130px,24%) 1fr" : "1fr", gap: 14, alignItems: "start", marginBottom: 16 }}>
             {imgData && (
               <div style={{ position: "sticky", top: 10 }}>
-                <img src={imgData.url} alt="" style={{ width:"100%", borderRadius:4, border:`1px solid ${BORDER}` }} />
+                <img src={imgData.url} alt="" style={{ width: "100%", borderRadius: 4, border: `1px solid ${BORDER}` }} />
                 {imgMeta && (
-                  <div style={{ marginTop:6, fontSize:7, color:TEXT2, fontFamily:"monospace", lineHeight:2 }}>
+                  <div style={{ marginTop: 6, fontSize: 7, color: TEXT2, fontFamily: "monospace", lineHeight: 2 }}>
                     <div>📐 {imgMeta.size}</div>
                     <div>📅 {imgMeta.datetime}</div>
                     {layers[0]?.bgInfo && <div>💡 {layers[0].bgInfo}</div>}
@@ -881,18 +832,18 @@ export default function App() {
               </div>
             )}
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", minWidth:380 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 380 }}>
                 <thead>
-                  <tr style={{ borderBottom:`1px solid ${BORDER}` }}>
-                    {["#","Color · Doc","Nombre / Códigos","NCS · RAL","American Colors"].map(h => (
-                      <th key={h} style={{ padding:"6px 8px", textAlign:"left", fontSize:7.5, color:TEXT2, letterSpacing:".1em", textTransform:"uppercase", background:"rgba(200,169,110,.06)", fontWeight:400 }}>{h}</th>
+                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    {["#", "Color · Doc", "Nombre / Códigos", "NCS · RAL", "American Colors"].map(h => (
+                      <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontSize: 7.5, color: TEXT2, letterSpacing: ".1em", textTransform: "uppercase", background: "rgba(200,169,110,.06)", fontWeight: 400 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {activeLayers.map((l,i) => (
+                  {activeLayers.map((l, i) => (
                     <LayerRow key={i} layer={l} layerIndex={i} onCopy={copyVal} copied={copied}
-                      hasNote={(layerNotes[i]||"").trim().length>0}
+                      hasNote={(layerNotes[i] || "").trim().length > 0}
                       onOpenNote={setActiveNoteLayer} />
                   ))}
                 </tbody>
@@ -901,14 +852,14 @@ export default function App() {
           </div>
 
           {/* Acciones */}
-          <div style={{ borderTop:`1px solid ${BORDER}`, paddingTop:16, display:"flex", flexDirection:"column", gap:10 }}>
-            <button style={{ ...btn(allDocumented,false), width:"100%", padding:"16px", fontSize:12 }} onClick={dlPDF}>
-              {allDocumented ? "🖨 Exportar PDF" : `🖨 PDF  (faltan ${activeLayers.length-docCount} notas)`}
+          <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+            <button style={{ ...btn(allDocumented, false), width: "100%", padding: "16px", fontSize: 12 }} onClick={dlPDF}>
+              {allDocumented ? "🖨 Exportar PDF" : `🖨 PDF  (faltan ${activeLayers.length - docCount} notas)`}
             </button>
-            <div style={{ display:"flex", gap:10 }}>
-              <button style={{ ...btn(false), flex:1, fontSize:10 }} onClick={dlCSV}>↓ CSV</button>
-              <button style={{ ...btn(false), flex:1, fontSize:10 }} onClick={() => setScr("capture")}>← Foto</button>
-              <button style={{ ...btn(false), flex:1, fontSize:10 }} onClick={home}>⌂ Inicio</button>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={{ ...btn(false), flex: 1, fontSize: 10 }} onClick={dlCSV}>↓ CSV</button>
+              <button style={{ ...btn(false), flex: 1, fontSize: 10 }} onClick={() => setScr("capture")}>← Foto</button>
+              <button style={{ ...btn(false), flex: 1, fontSize: 10 }} onClick={home}>⌂ Inicio</button>
             </div>
           </div>
         </div>
