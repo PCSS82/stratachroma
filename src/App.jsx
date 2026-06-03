@@ -207,9 +207,7 @@ function useSpeechRecognition({ onFinal, onInterim }) {
   const timerRef     = useRef(null);
   const onFinalRef   = useRef(onFinal);
   const onInterimRef = useRef(onInterim);
-  const [micDenied, setMicDenied] = useState(false);
 
-  // Keep callback refs fresh on every render
   onFinalRef.current   = onFinal;
   onInterimRef.current = onInterim;
 
@@ -217,9 +215,9 @@ function useSpeechRecognition({ onFinal, onInterim }) {
     if (!activeRef.current || !hasSpeechAPI()) return;
     const SR  = window.SpeechRecognition || window.webkitSpeechRecognition;
     const rec = new SR();
-    rec.lang           = "es-ES";
-    rec.continuous     = !IS_IOS;  // continuous en desktop/Android; false en iOS
-    rec.interimResults = true;
+    rec.lang            = "es-ES";
+    rec.continuous      = !IS_IOS;   // continuous en desktop/Android; false en iOS
+    rec.interimResults  = true;
     rec.maxAlternatives = 1;
 
     rec.onresult = e => {
@@ -234,16 +232,12 @@ function useSpeechRecognition({ onFinal, onInterim }) {
 
     rec.onend = () => {
       onInterimRef.current("");
-      // iOS necesita reinicio manual; en desktop continuous:true rara vez termina solo
-      if (activeRef.current)
-        timerRef.current = setTimeout(startRec, 150);
+      if (activeRef.current) timerRef.current = setTimeout(startRec, 150);
     };
 
     rec.onerror = e => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-        activeRef.current = false;
-        setMicDenied(true);
-        return;
+        activeRef.current = false; // para el reinicio
       }
       // no-speech / aborted → onend se encarga del reinicio
     };
@@ -256,7 +250,6 @@ function useSpeechRecognition({ onFinal, onInterim }) {
 
   const start = useCallback(() => {
     if (!hasSpeechAPI()) return false;
-    setMicDenied(false);
     activeRef.current = true;
     startRec();
     return true;
@@ -276,7 +269,7 @@ function useSpeechRecognition({ onFinal, onInterim }) {
     try { recRef.current?.abort(); } catch {}
   }, []);
 
-  return { start, stop, micDenied };
+  return { start, stop };
 }
 
 // ─── MODAL DOCUMENTACIÓN ──────────────────────────────────────────────────────
@@ -289,25 +282,58 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
     setNote(prev => prev ? prev.trimEnd() + " " + text : text);
   }, []);
 
-  const { start, stop, micDenied } = useSpeechRecognition({
+  const { start, stop } = useSpeechRecognition({
     onFinal: handleFinal,
     onInterim: setInterim,
   });
+
+  // Refs estables para usar dentro de effects sin closures stale
+  const stopRef  = useRef(stop);
+  const startRef = useRef(start);
+  stopRef.current  = stop;
+  startRef.current = start;
+
+  // Solicitar permiso de micrófono vía getUserMedia y arrancar la transcripción.
+  // getUserMedia dispara el diálogo nativo del browser (solo la primera vez);
+  // en usos posteriores, el permiso ya está concedido y arranca sin diálogo.
+  const activateMic = useCallback(async () => {
+    if (!hasSpeechAPI()) return false;
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(t => t.stop()); // libera el stream; el permiso queda concedido
+      } catch {
+        return false; // permiso denegado — el browser ya informó al usuario
+      }
+    }
+    return startRef.current();
+  }, []);
+
+  // Auto-arranque al montar el modal.
+  // Desktop/Android: funciona siempre que el permiso esté concedido.
+  // iOS: la primera vez puede requerir que el usuario toque "Dictar".
+  useEffect(() => {
+    let cancelled = false;
+    activateMic().then(ok => { if (!cancelled && ok) setRecording(true); });
+    return () => { cancelled = true; stopRef.current(); };
+  }, []); // eslint-disable-line
+
+  const toggle = useCallback(async () => {
+    if (recording) {
+      stopRef.current(); setRecording(false);
+    } else {
+      const ok = await activateMic();
+      if (ok) setRecording(true);
+    }
+  }, [recording, activateMic]);
 
   const { r, g, b } = layer.rgb;
   const lum = (r * 299 + g * 587 + b * 114) / 1000;
   const fg  = lum > 140 ? "#111" : "#fff";
 
-  const toggle = () => {
-    if (recording) { stop(); setRecording(false); }
-    else { if (start()) setRecording(true); }
-  };
-
-  useEffect(() => () => stop(), []); // limpieza al desmontar
-
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.88)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-      onClick={e => { if (e.target === e.currentTarget) { stop(); onClose(); } }}>
+      onClick={e => { if (e.target === e.currentTarget) { stopRef.current(); onClose(); } }}>
       <div style={{ background: "#141210", border: `1px solid ${BORDER_GOLD}`, borderRadius: "12px 12px 0 0", width: "100%", maxWidth: 560, padding: "24px 20px 36px", maxHeight: "85vh", overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
           <div style={{ width: 52, height: 52, background: layer.hex, borderRadius: 6, border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -318,19 +344,18 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
             <div style={{ fontSize: 13, color: TEXT, fontFamily: "monospace", fontWeight: 600 }}>{layer.name}</div>
             <div style={{ fontSize: 9, color: TEXT2, fontFamily: "monospace" }}>{layer.ncs} · {layer.ral?.split(" — ")[0]}</div>
           </div>
-          <button onClick={() => { stop(); onClose(); }} style={{ marginLeft: "auto", background: "none", border: "none", color: MUTED, fontSize: 20, cursor: "pointer", padding: "0 4px" }}>✕</button>
+          <button onClick={() => { stopRef.current(); onClose(); }} style={{ marginLeft: "auto", background: "none", border: "none", color: MUTED, fontSize: 20, cursor: "pointer", padding: "0 4px" }}>✕</button>
         </div>
 
         <label style={lbl}>Observaciones de campo</label>
         <textarea
           value={note}
           onChange={e => setNote(e.target.value)}
-          placeholder="Describe esta capa: material, estado, época, intervenciones previas…"
+          placeholder={recording ? "Habla ahora — se transcribe automáticamente…" : "Toca «Dictar» o escribe aquí…"}
           rows={5}
           style={{ ...inp, fontSize: 14, resize: "vertical", lineHeight: 1.6 }}
         />
 
-        {/* Texto en tiempo real del reconocedor */}
         {interim && (
           <div style={{ marginTop: 6, padding: "6px 10px", background: "rgba(200,169,110,.06)", border: `1px solid ${BORDER_GOLD}`, borderRadius: 3, fontSize: 12, color: TEXT2, fontFamily: "monospace", fontStyle: "italic" }}>
             {interim}…
@@ -340,34 +365,25 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
         <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
           <button
             onClick={toggle}
-            style={{ ...btn(recording, false), padding: "12px 20px", fontSize: 11, minWidth: 150,
+            style={{ ...btn(recording, false), padding: "12px 20px", fontSize: 11, minWidth: 140,
               background: recording ? "rgba(180,60,60,.2)" : "rgba(255,255,255,.05)",
               borderColor: recording ? "rgba(220,80,80,.5)" : BORDER,
               color: recording ? "#e07070" : TEXT2 }}>
-            {recording ? "⏹ Detener voz" : "🎙 Dictar nota"}
+            {recording ? "⏹ Detener" : "🎙 Dictar"}
           </button>
-          {recording && <span style={{ fontSize: 9, color: "#e07070", fontFamily: "monospace", animation: "blink 1s ease-in-out infinite" }}>● Escuchando…</span>}
+          {recording
+            ? <span style={{ fontSize: 9, color: "#e07070", fontFamily: "monospace", animation: "blink 1s ease-in-out infinite" }}>● Escuchando…</span>
+            : hasSpeechAPI() && <span style={{ fontSize: 9, color: MUTED, fontFamily: "monospace" }}>Toca para dictar</span>}
           {note && !recording && <button onClick={() => setNote("")} style={{ ...btn(false, true), fontSize: 9 }}>✕ Limpiar</button>}
         </div>
 
-        {micDenied && (
-          <div style={{ marginTop: 8, fontSize: 9, color: "#e07870", fontFamily: "monospace", padding: "6px 10px", background: "rgba(180,60,60,.08)", borderRadius: 3 }}>
-            ⚠ Micrófono bloqueado — actívalo en ajustes del navegador y recarga
-          </div>
-        )}
-        {!hasSpeechAPI() && (
-          <div style={{ marginTop: 8, fontSize: 9, color: "#e07870", fontFamily: "monospace", padding: "6px 10px", background: "rgba(180,60,60,.08)", borderRadius: 3 }}>
-            ⚠ Voz no disponible — usa Chrome, Safari o Edge
-          </div>
-        )}
-
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button
-            onClick={() => { stop(); onSave(layerIndex, note.trim()); onClose(); }}
+            onClick={() => { stopRef.current(); onSave(layerIndex, note.trim()); onClose(); }}
             style={{ ...btn(true), flex: 1, padding: "14px", fontSize: 12 }}>
             ✓ Guardar nota
           </button>
-          <button onClick={() => { stop(); onClose(); }} style={{ ...btn(false), padding: "14px 20px", fontSize: 11 }}>Cancelar</button>
+          <button onClick={() => { stopRef.current(); onClose(); }} style={{ ...btn(false), padding: "14px 20px", fontSize: 11 }}>Cancelar</button>
         </div>
       </div>
       <style>{`@keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}`}</style>
@@ -489,6 +505,26 @@ export default function App() {
   const home = () => { setScr("home"); reset(); };
   const copyVal = v => { navigator.clipboard?.writeText(v); setCopied(v); setTimeout(() => setCopied(null), 1500); };
   const saveNote = (idx, text) => setLayerNotes(prev => ({ ...prev, [idx]: text }));
+
+  // Auto-fetch GPS del dispositivo al entrar en capture (silencioso, sin bloquear).
+  // El GPS del EXIF de la foto tiene prioridad y sobreescribirá este valor.
+  useEffect(() => {
+    if (scr !== "capture" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      p => {
+        const pos = {
+          lat: p.coords.latitude.toFixed(6),
+          lon: p.coords.longitude.toFixed(6),
+          alt: p.coords.altitude ? p.coords.altitude.toFixed(1) + "m" : "N/A",
+          acc: p.coords.accuracy ? p.coords.accuracy.toFixed(0) + "m" : "N/A",
+        };
+        setGps(prev => prev || pos);           // no sobreescribe si ya hay GPS (EXIF)
+        setGpsStatus(prev => prev || "📍 GPS dispositivo");
+      },
+      () => {},  // fallo silencioso
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
+    );
+  }, [scr]);
 
   const pick = useCallback(async file => {
     if (!file?.type.startsWith("image/")) { setErr("Archivo no es imagen"); return; }
@@ -639,13 +675,13 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
           <button style={{ ...btn(!!gps, true), flexShrink: 0 }} onClick={fetchGPS}
-            title={gps?.acc === "EXIF" ? "Sobreescribir con GPS del dispositivo" : "Capturar ubicación GPS"}>
+            title={gps ? "Actualizar GPS del dispositivo" : "Capturar ubicación GPS"}>
             {gps ? "📍 GPS ✓" : "📍 GPS"}
           </button>
           <span style={{ fontSize: 9, color: gps ? "#4cc87a" : MUTED, fontFamily: "monospace", lineHeight: 1.5 }}>
             {gps
               ? `${gps.lat}, ${gps.lon} · Alt: ${gps.alt}${gps.acc === "EXIF" ? " · 📷 EXIF" : ` · ±${gps.acc}`}`
-              : gpsStatus || "Opcional — se obtiene automático del EXIF de la foto"}
+              : gpsStatus || "Buscando GPS…"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
