@@ -427,32 +427,66 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
   );
 });
 
-// ─── CONSENTIMIENTO DE MICRÓFONO ──────────────────────────────────────────────
-const MicConsentModal = memo(({ onAccept, onDecline }) => (
+// ─── PANTALLA DE PERMISO DE MICRÓFONO ────────────────────────────────────────
+const MicPermissionScreen = memo(({ onAuthorize }) => (
   <div style={{
-    position: "fixed", inset: 0, background: "rgba(0,0,0,.93)", zIndex: 2000,
-    display: "flex", alignItems: "center", justifyContent: "center", padding: "24px"
+    minHeight: "100vh", background: BG, color: TEXT,
+    fontFamily: "Georgia,serif", display: "flex", flexDirection: "column"
   }}>
+    <div style={{ borderBottom: `1px solid ${BORDER}`, padding: "14px 20px", background: BG }}>
+      <div style={{ fontSize: 9, color: MUTED, fontFamily: "monospace", letterSpacing: "0.14em", marginBottom: 2 }}>
+        STRATACHROMA · v22 · MC 1M P50 CIE-LAB · EXIF · MONTEA_COLOR
+      </div>
+      <h1 style={{ fontSize: 22, fontWeight: 300, color: TEXT, margin: 0, letterSpacing: ".05em" }}>
+        STRATA<span style={{ color: GOLD }}>CHROMA</span>
+      </h1>
+    </div>
     <div style={{
-      background: "#141210", border: `1px solid ${BORDER_GOLD}`,
-      borderRadius: 8, width: "100%", maxWidth: 400, padding: "32px 24px"
+      flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 24px"
     }}>
-      <div style={{ fontSize: 32, textAlign: "center", marginBottom: 12 }}>🎙</div>
-      <div style={{ fontSize: 10, color: GOLD, fontFamily: "monospace", letterSpacing: ".12em", textAlign: "center", marginBottom: 14 }}>
-        NOTAS DE VOZ
-      </div>
-      <div style={{ fontSize: 13, color: TEXT, fontFamily: "monospace", lineHeight: 1.75, marginBottom: 8 }}>
-        STRATACHROMA usa dictado de voz para documentar las capas de cada cala.
-      </div>
-      <div style={{ fontSize: 11, color: TEXT2, fontFamily: "monospace", lineHeight: 1.75, marginBottom: 28 }}>
-        Permite el acceso al micrófono para dictar observaciones de campo directamente en la app.
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <button style={{ ...btn(true), width: "100%", padding: "15px", fontSize: 11 }} onClick={onAccept}>
-          ✓ PERMITIR MICRÓFONO
-        </button>
-        <button style={{ ...btn(false), width: "100%", padding: "13px", fontSize: 10 }} onClick={onDecline}>
-          CONTINUAR SIN VOZ
+      <div style={{ width: "100%", maxWidth: 400 }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: "50%",
+          background: "rgba(200,169,110,.08)", border: `1px solid ${BORDER_GOLD}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          margin: "0 auto 24px"
+        }}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+        <div style={{
+          fontSize: 10, color: GOLD, fontFamily: "monospace",
+          letterSpacing: ".15em", textAlign: "center", marginBottom: 20
+        }}>
+          ACCESO AL MICRÓFONO
+        </div>
+        <div style={{
+          fontSize: 15, color: TEXT, fontFamily: "monospace",
+          lineHeight: 1.8, marginBottom: 12, textAlign: "center"
+        }}>
+          Esta app usa el micrófono únicamente para el dictado de voz.
+        </div>
+        <div style={{
+          fontSize: 11, color: TEXT2, fontFamily: "monospace",
+          lineHeight: 1.9, marginBottom: 36, textAlign: "center",
+          padding: "0 8px"
+        }}>
+          No se realiza ninguna grabación ni almacenamiento de audio.
+          El micrófono se activa solo mientras dictás observaciones de campo en la documentación de capas.
+        </div>
+        <button
+          onClick={onAuthorize}
+          style={{
+            ...btn(true),
+            width: "100%", padding: "18px", fontSize: 12,
+            letterSpacing: ".15em"
+          }}
+        >
+          AUTORIZAR Y CONTINUAR
         </button>
       </div>
     </div>
@@ -475,7 +509,13 @@ const Wrap = ({ children, back }) => (
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [scr, setScr]   = useState("home");
+  const [scr, setScr] = useState(() => {
+    try {
+      return localStorage.getItem("sc_mic_consent") ? "home" : "mic-permission";
+    } catch {
+      return "mic-permission";
+    }
+  });
   const projRef = useRef(""), codeRef = useRef("");
   const [projD, setProjD] = useState(""), [codeD, setCodeD] = useState("");
   const [imgData, setImgData]   = useState(null);
@@ -495,28 +535,13 @@ export default function App() {
   const [showCalib, setShowCalib]   = useState(false);
   const [editingRef, setEditingRef] = useState(false);
 
-  const [showMicConsent, setShowMicConsent] = useState(false);
-
-  useEffect(() => {
+  const handleMicAuthorize = async () => {
+    localStorage.setItem("sc_mic_consent", "granted");
     try {
-      const hasMic = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-      if (hasMic && !localStorage.getItem("sc_mic_consent")) {
-        setShowMicConsent(true);
-      }
+      const stream = await navigator.mediaDevices?.getUserMedia({ audio: true });
+      stream?.getTracks().forEach(t => t.stop());
     } catch {}
-  }, []);
-
-  const handleMicConsent = async (accept) => {
-    setShowMicConsent(false);
-    if (accept) {
-      localStorage.setItem("sc_mic_consent", "granted");
-      try {
-        const stream = await navigator.mediaDevices?.getUserMedia({ audio: true });
-        stream?.getTracks().forEach(t => t.stop());
-      } catch {}
-    } else {
-      localStorage.setItem("sc_mic_consent", "denied");
-    }
+    setScr("home");
   };
 
   const refHex = useMemo(() => rgbToHex(monteaRef), [monteaRef]);
@@ -636,6 +661,11 @@ export default function App() {
     a.click();
   };
 
+  // ── MIC PERMISSION ──────────────────────────────────────────────────────────
+  if (scr === "mic-permission") return (
+    <MicPermissionScreen onAuthorize={handleMicAuthorize} />
+  );
+
   // ── HOME ────────────────────────────────────────────────────────────────────
   if (scr === "home") return (
     <Wrap>
@@ -650,12 +680,6 @@ export default function App() {
           + Nueva Cala
         </button>
       </div>
-      {showMicConsent && (
-        <MicConsentModal
-          onAccept={() => handleMicConsent(true)}
-          onDecline={() => handleMicConsent(false)}
-        />
-      )}
     </Wrap>
   );
 
