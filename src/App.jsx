@@ -164,13 +164,14 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
   const [note, setNote] = useState(initialNote || "");
   const [recording, setRecording] = useState(false);
   const recognizerRef = useRef(null);
+  const activeRef = useRef(false); // tracks intent to record (avoids stale closure)
   const { r, g, b } = layer.rgb;
   const lum = (r * 299 + g * 587 + b * 114) / 1000;
   const fg = lum > 140 ? "#111" : "#fff";
 
-  const startRecording = () => {
+  const createRec = () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Reconocimiento de voz no disponible en este navegador.\nUsa Chrome o Safari."); return; }
+    if (!SR) return null;
     const rec = new SR();
     rec.lang = "es-ES";
     rec.continuous = true;
@@ -182,14 +183,38 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
       }
       if (text) setNote(prev => prev ? prev + " " + text.trim() : text.trim());
     };
-    rec.onerror = () => setRecording(false);
-    rec.onend = () => setRecording(false);
-    try { rec.start(); recognizerRef.current = rec; setRecording(true); } catch { setRecording(false); }
+    // Auto-reconexión: si el navegador corta por silencio, reinicia solo
+    rec.onend = () => {
+      if (activeRef.current) {
+        try { const r2 = createRec(); r2?.start(); recognizerRef.current = r2; }
+        catch { activeRef.current = false; setRecording(false); }
+      } else {
+        setRecording(false);
+      }
+    };
+    rec.onerror = e => {
+      if (e.error === "no-speech" && activeRef.current) return; // silencio normal, onend reconectará
+      activeRef.current = false; setRecording(false);
+    };
+    return rec;
   };
 
-  const stopRecording = () => { recognizerRef.current?.stop(); setRecording(false); };
+  const startRecording = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Reconocimiento de voz no disponible en este navegador.\nUsa Chrome o Safari."); return; }
+    const rec = createRec();
+    if (!rec) return;
+    try { rec.start(); recognizerRef.current = rec; activeRef.current = true; setRecording(true); }
+    catch { activeRef.current = false; setRecording(false); }
+  };
 
-  useEffect(() => () => recognizerRef.current?.stop(), []);
+  const stopRecording = () => {
+    activeRef.current = false;
+    recognizerRef.current?.stop();
+    setRecording(false);
+  };
+
+  useEffect(() => () => { activeRef.current = false; recognizerRef.current?.stop(); }, []);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
