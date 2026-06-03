@@ -427,6 +427,38 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
   );
 });
 
+// ─── CONSENTIMIENTO DE MICRÓFONO ──────────────────────────────────────────────
+const MicConsentModal = memo(({ onAccept, onDecline }) => (
+  <div style={{
+    position: "fixed", inset: 0, background: "rgba(0,0,0,.93)", zIndex: 2000,
+    display: "flex", alignItems: "center", justifyContent: "center", padding: "24px"
+  }}>
+    <div style={{
+      background: "#141210", border: `1px solid ${BORDER_GOLD}`,
+      borderRadius: 8, width: "100%", maxWidth: 400, padding: "32px 24px"
+    }}>
+      <div style={{ fontSize: 32, textAlign: "center", marginBottom: 12 }}>🎙</div>
+      <div style={{ fontSize: 10, color: GOLD, fontFamily: "monospace", letterSpacing: ".12em", textAlign: "center", marginBottom: 14 }}>
+        NOTAS DE VOZ
+      </div>
+      <div style={{ fontSize: 13, color: TEXT, fontFamily: "monospace", lineHeight: 1.75, marginBottom: 8 }}>
+        STRATACHROMA usa dictado de voz para documentar las capas de cada cala.
+      </div>
+      <div style={{ fontSize: 11, color: TEXT2, fontFamily: "monospace", lineHeight: 1.75, marginBottom: 28 }}>
+        Permite el acceso al micrófono para dictar observaciones de campo directamente en la app.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button style={{ ...btn(true), width: "100%", padding: "15px", fontSize: 11 }} onClick={onAccept}>
+          ✓ PERMITIR MICRÓFONO
+        </button>
+        <button style={{ ...btn(false), width: "100%", padding: "13px", fontSize: 10 }} onClick={onDecline}>
+          CONTINUAR SIN VOZ
+        </button>
+      </div>
+    </div>
+  </div>
+));
+
 // ─── LAYOUT WRAPPER ───────────────────────────────────────────────────────────
 const Wrap = ({ children, back }) => (
   <div style={{ minHeight: "100vh", background: BG, color: TEXT, fontFamily: "Georgia,serif", display: "flex", flexDirection: "column" }}>
@@ -462,6 +494,28 @@ export default function App() {
   const [calibActive, setCalibActive] = useState(false);
   const [showCalib, setShowCalib]   = useState(false);
   const [editingRef, setEditingRef] = useState(false);
+
+  const [showMicConsent, setShowMicConsent] = useState(false);
+
+  useEffect(() => {
+    const hasMic = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (hasMic && !localStorage.getItem("sc_mic_consent")) {
+      setShowMicConsent(true);
+    }
+  }, []);
+
+  const handleMicConsent = async (accept) => {
+    setShowMicConsent(false);
+    if (accept) {
+      localStorage.setItem("sc_mic_consent", "granted");
+      try {
+        const stream = await navigator.mediaDevices?.getUserMedia({ audio: true });
+        stream?.getTracks().forEach(t => t.stop());
+      } catch {}
+    } else {
+      localStorage.setItem("sc_mic_consent", "denied");
+    }
+  };
 
   const refHex = useMemo(() => rgbToHex(monteaRef), [monteaRef]);
 
@@ -582,19 +636,27 @@ export default function App() {
 
   // ── HOME ────────────────────────────────────────────────────────────────────
   if (scr === "home") return (
-    <Wrap>
-      <div style={{ padding: "40px 24px", maxWidth: 460 }}>
-        <div style={{ fontFamily: "monospace", marginBottom: 40, lineHeight: 2 }}>
-          <div style={{ fontSize: 12, color: TEXT2 }}>Análisis estratigráfico de calas de pintura</div>
-          <div style={{ fontSize: 10, color: GOLD, marginTop: 4 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS desde EXIF</div>
-          <div style={{ fontSize: 10, color: "#6699cc", marginTop: 2 }}>NCS · RAL · HEX · American Colors</div>
-          <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · MONTEA_COLOR · Notas de voz</div>
+    <>
+      <Wrap>
+        <div style={{ padding: "40px 24px", maxWidth: 460 }}>
+          <div style={{ fontFamily: "monospace", marginBottom: 40, lineHeight: 2 }}>
+            <div style={{ fontSize: 12, color: TEXT2 }}>Análisis estratigráfico de calas de pintura</div>
+            <div style={{ fontSize: 10, color: GOLD, marginTop: 4 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS desde EXIF</div>
+            <div style={{ fontSize: 10, color: "#6699cc", marginTop: 2 }}>NCS · RAL · HEX · American Colors</div>
+            <div style={{ fontSize: 10, color: TEXT2, marginTop: 2 }}>PDF · CSV · MONTEA_COLOR · Notas de voz</div>
+          </div>
+          <button style={{ ...btn(true), padding: "16px 28px", fontSize: 12 }} onClick={() => setScr("meta")}>
+            + Nueva Cala
+          </button>
         </div>
-        <button style={{ ...btn(true), padding: "16px 28px", fontSize: 12 }} onClick={() => setScr("meta")}>
-          + Nueva Cala
-        </button>
-      </div>
-    </Wrap>
+      </Wrap>
+      {showMicConsent && (
+        <MicConsentModal
+          onAccept={() => handleMicConsent(true)}
+          onDecline={() => handleMicConsent(false)}
+        />
+      )}
+    </>
   );
 
   // ── META ────────────────────────────────────────────────────────────────────
