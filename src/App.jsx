@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect, memo, useMemo } from "react";
 import { analyzeImage, rgbToLab } from "./motor.js";
 import { enrichLayer } from "./colors.js";
-import { saveCala, listFolders, listFiles, readJSON, readImageAsDataURL, trashItem, ROOT_FOLDER_ID, getToken, signOut } from "./drive.js";
 
 // ─── GPS ──────────────────────────────────────────────────────────────────────
 function getGPS() {
@@ -196,7 +195,6 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: "#141210", border: "1px solid rgba(200,169,110,.2)", borderRadius: "12px 12px 0 0", width: "100%", maxWidth: 560, padding: "24px 20px 32px", maxHeight: "80vh", overflowY: "auto" }}>
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
           <div style={{ width: 52, height: 52, background: layer.hex, borderRadius: 6, border: "1px solid rgba(255,255,255,.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <span style={{ color: fg, fontSize: 5.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)" }}>{layer.hex}</span>
@@ -209,7 +207,6 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
           <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "#444", fontSize: 20, cursor: "pointer", padding: "0 4px" }}>✕</button>
         </div>
 
-        {/* Text area */}
         <label style={LBL}>Observaciones de campo</label>
         <textarea
           value={note}
@@ -219,7 +216,6 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
           style={{ ...INP, fontSize: 14, resize: "vertical", lineHeight: 1.6 }}
         />
 
-        {/* Voice control */}
         <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center" }}>
           <button
             onClick={recording ? stopRecording : startRecording}
@@ -233,7 +229,6 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
           {note && !recording && <button onClick={() => setNote("")} style={{ ...B(false, true), fontSize: 9, color: "#888" }}>✕ Limpiar</button>}
         </div>
 
-        {/* Save */}
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button
             onClick={() => { onSave(layerIndex, note.trim()); onClose(); }}
@@ -260,7 +255,6 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
           title={hasNote ? "Nota guardada — clic para editar" : "Clic para documentar esta capa"}
           style={{ position: "relative", width: 40, height: 40, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(80,200,120,.6)" : "rgba(200,100,50,.5)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ color: fg, fontSize: 5.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{layer.hex}</span>
-          {/* Status dot */}
           <div style={{ position: "absolute", top: -5, right: -5, width: 12, height: 12, borderRadius: "50%", background: hasNote ? "#4cc87a" : "#e07840", border: "2px solid #141210", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ fontSize: 6, color: "#fff", fontWeight: 900, lineHeight: 1 }}>{hasNote ? "✓" : "!"}</span>
           </div>
@@ -268,7 +262,7 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
       </td>
       <td style={{ padding: "8px 8px" }}>
         <div style={{ fontSize: 10, color: "#a09070", fontWeight: 600, marginBottom: 3 }}>{layer.name}</div>
-        <div style={{ fontSize: 9, color: copied === layer.hex ? G : G, fontWeight: 700, cursor: "pointer" }} onClick={() => onCopy(layer.hex)}>{copied === layer.hex ? "✓ copiado" : layer.hex}</div>
+        <div style={{ fontSize: 9, color: G, fontWeight: 700, cursor: "pointer" }} onClick={() => onCopy(layer.hex)}>{copied === layer.hex ? "✓ copiado" : layer.hex}</div>
       </td>
       <td style={{ padding: "8px 6px" }}>
         <div style={{ fontSize: 9, color: "#5090d0", marginBottom: 2 }}>{layer.ncs}</div>
@@ -291,14 +285,6 @@ export default function App() {
   const [status, setStatus] = useState(""), [err, setErr] = useState(null);
   const [gps, setGps] = useState(null), [gpsStatus, setGpsStatus] = useState("");
   const [copied, setCopied] = useState(null);
-  const [saving, setSaving] = useState(false), [saveMsg, setSaveMsg] = useState("");
-  const [exps, setExps] = useState([]), [expLoading, setExpLoading] = useState(false);
-  const [driveReady, setDriveReady] = useState(false);
-  const [selProj, setSelProj] = useState(null);
-  const [selCala, setSelCala] = useState(null);
-  const [calas, setCalas] = useState([]);
-  const [fichaData, setFichaData] = useState(null);
-  const [fichaImg, setFichaImg] = useState(null);
   const fRef = useRef(), cRef = useRef(), imgFileRef = useRef(null);
   const [imgMeta, setImgMeta] = useState(null);
   const today = new Date().toISOString().slice(0, 10);
@@ -326,14 +312,11 @@ export default function App() {
     const meas = hexToRgb(measuredRefHex);
     const refLAB = rgbToLab(monteaColorRef.r, monteaColorRef.g, monteaColorRef.b);
     const measLAB = rgbToLab(meas.r, meas.g, meas.b);
-    const dL = refLAB[0] - measLAB[0];
-    const da = refLAB[1] - measLAB[1];
-    const db = refLAB[2] - measLAB[2];
+    const dL = refLAB[0] - measLAB[0], da = refLAB[1] - measLAB[1], db = refLAB[2] - measLAB[2];
     return layers.map(layer => {
       const lab = layer.lab || { L: 50, a: 0, b: 0 };
       const corrRgb = labToRgb(lab.L + dL, lab.a + da, lab.b + db);
-      const corrHex = rgbToHex(corrRgb);
-      return enrichLayer({ ...layer, rgb: corrRgb, hex: corrHex, lab: { L: lab.L + dL, a: lab.a + da, b: lab.b + db } });
+      return enrichLayer({ ...layer, rgb: corrRgb, hex: rgbToHex(corrRgb), lab: { L: lab.L + dL, a: lab.a + da, b: lab.b + db } });
     });
   }, [layers, calibrationActive, measuredRefHex, monteaColorRef]);
 
@@ -343,13 +326,7 @@ export default function App() {
     const meas = hexToRgb(measuredRefHex);
     const refLAB = rgbToLab(monteaColorRef.r, monteaColorRef.g, monteaColorRef.b);
     const measLAB = rgbToLab(meas.r, meas.g, meas.b);
-    return {
-      refHex,
-      measHex: measuredRefHex,
-      dL: (refLAB[0] - measLAB[0]).toFixed(1),
-      da: (refLAB[1] - measLAB[1]).toFixed(1),
-      db: (refLAB[2] - measLAB[2]).toFixed(1),
-    };
+    return { refHex, measHex: measuredRefHex, dL: (refLAB[0] - measLAB[0]).toFixed(1), da: (refLAB[1] - measLAB[1]).toFixed(1), db: (refLAB[2] - measLAB[2]).toFixed(1) };
   }, [calibrationActive, measuredRefHex, monteaColorRef, refHex]);
 
   const allDocumented = useMemo(() =>
@@ -362,48 +339,26 @@ export default function App() {
 
   const reset = () => {
     setImgData(null); setLayers([]); setStatus(""); setErr(null); setGps(null); setGpsStatus("");
-    setCopied(null); setSaving(false); setSaveMsg(""); setImgMeta(null); imgFileRef.current = null;
+    setCopied(null); setImgMeta(null); imgFileRef.current = null;
     setLayerNotes({}); setActiveNoteLayer(null); setCalibrationActive(false); setShowCalibPanel(false);
   };
   const home = () => { setScr("home"); reset(); };
   const copyVal = v => { navigator.clipboard?.writeText(v); setCopied(v); setTimeout(() => setCopied(null), 1500); };
-
   const saveNote = (idx, text) => setLayerNotes(prev => ({ ...prev, [idx]: text }));
 
-  // Al montar: GPS automático + reconectar Drive si hay token guardado
   useEffect(() => {
     if (navigator.geolocation) {
       setGpsStatus("Obteniendo GPS…");
       navigator.geolocation.getCurrentPosition(
         p => {
-          const pos = {
-            lat: p.coords.latitude.toFixed(6),
-            lon: p.coords.longitude.toFixed(6),
-            alt: p.coords.altitude ? p.coords.altitude.toFixed(1) + "m" : "N/A",
-            acc: p.coords.accuracy ? p.coords.accuracy.toFixed(0) + "m" : "N/A",
-          };
+          const pos = { lat: p.coords.latitude.toFixed(6), lon: p.coords.longitude.toFixed(6), alt: p.coords.altitude ? p.coords.altitude.toFixed(1) + "m" : "N/A", acc: p.coords.accuracy ? p.coords.accuracy.toFixed(0) + "m" : "N/A" };
           setGps(pos); setGpsStatus(`📍 ${pos.lat}, ${pos.lon}`);
         },
         () => setGpsStatus("GPS: permite acceso"),
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
-    const savedToken = localStorage.getItem("sc_gtoken");
-    const savedExpiry = parseInt(localStorage.getItem("sc_gexpiry") || "0");
-    if (savedToken && Date.now() < savedExpiry) {
-      setDriveReady(true);
-    } else {
-      const tryReconnect = async () => {
-        try { await getToken(); setDriveReady(true); } catch { /* silencioso */ }
-      };
-      setTimeout(tryReconnect, 1500);
-    }
   }, []);
-
-  const connectDrive = async () => {
-    try { setDriveReady(false); await getToken(); setDriveReady(true); }
-    catch (e) { alert("Error conectando Drive: " + e.message.slice(0, 80)); }
-  };
 
   const pick = useCallback(async file => {
     if (!file?.type.startsWith("image/")) { setErr("No es imagen"); return; }
@@ -438,32 +393,14 @@ export default function App() {
     catch (e) { setErr(e.message); setScr("capture"); }
   };
 
-  const handleSave = async () => {
+  const dlPDF = () => {
     if (!allDocumented) {
       const missing = activeLayers.map((_, i) => (layerNotes[i] || "").trim() ? null : i + 1).filter(Boolean);
       alert(`⚠ Documenta todas las capas antes de exportar.\nCapas pendientes: ${missing.join(", ")}`);
       return;
     }
     const p = projRef.current || projD, c = codeRef.current || codeD;
-    let g = gps; if (!g) { g = await getGPS(); if (g) setGps(g); }
-    const layersToExport = activeLayers.map((l, i) => ({ ...l, notas: layerNotes[i] || "" }));
-
-    openPDF(p, c, today, layersToExport, imgData?.url, imgMeta, g, layerNotes, calibInfo);
-
-    setSaving(true); setSaveMsg("Conectando a Drive…");
-    try {
-      const ids = await saveCala(p, c, today, layersToExport, imgData?.b64, imgMeta, g, setSaveMsg);
-      setSaveMsg(`✅ Guardado en Drive!\n📁 ${p} / ${c}_${today}`);
-      setDriveReady(true);
-      setTimeout(() => home(), 2500);
-    } catch (e) {
-      if (e.message.includes("Auth") || e.message.includes("popup")) {
-        setSaveMsg("⚠ Necesitas autorizar Google Drive primero.\n→ Presiona 'Conectar Drive' en la pantalla principal.");
-      } else {
-        setSaveMsg(`⚠ ${e.message.slice(0, 100)}`);
-      }
-      setSaving(false);
-    }
+    openPDF(p, c, today, activeLayers, imgData?.url, imgMeta, gps, layerNotes, calibInfo);
   };
 
   const dlCSV = () => {
@@ -483,31 +420,6 @@ export default function App() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     a.download = `${p}_${c}_${today}.csv`; a.click();
-  };
-
-  const loadExps = async () => {
-    setExpLoading(true);
-    try { setExps(await listFolders(ROOT_FOLDER_ID)); } catch { setExps([]); }
-    finally { setExpLoading(false); }
-  };
-
-  const loadCalas = async (projId) => {
-    setExpLoading(true);
-    try { setCalas(await listFolders(projId)); } catch { setCalas([]); }
-    finally { setExpLoading(false); }
-  };
-
-  const loadFicha = async (calaId) => {
-    setExpLoading(true);
-    setFichaData(null); setFichaImg(null);
-    try {
-      const files = await listFiles(calaId);
-      const jsonFile = files.find(f => f.name.endsWith(".json"));
-      if (jsonFile) { const data = await readJSON(jsonFile.id); setFichaData(data); }
-      const imgFile = files.find(f => f.name.endsWith(".jpg") || f.name.endsWith(".jpeg") || f.name.endsWith(".png"));
-      if (imgFile) { const dataUrl = await readImageAsDataURL(imgFile.id); setFichaImg(dataUrl); }
-    } catch (e) { alert("Error cargando ficha: " + e.message); }
-    finally { setExpLoading(false); }
   };
 
   const Wrap = ({ children, back }) => (
@@ -532,18 +444,10 @@ export default function App() {
           Análisis estratigráfico de calas de pintura<br />
           <span style={{ color: G, fontSize: 9 }}>✦ MC 1,000,000 · P50 CIE-LAB · GPS altimetría</span><br />
           <span style={{ color: "#1a3355", fontSize: 9 }}>NCS · RAL · HEX · American Colors</span><br />
-          PDF · CSV · Google Drive · MONTEA_COLOR
+          PDF · CSV · MONTEA_COLOR · Sin cuenta requerida
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
           <button style={{ ...B(true), padding: "16px 24px", fontSize: 12 }} onClick={() => setScr("meta")}>+ Nueva Cala</button>
-          <button style={{ ...B(false), padding: "14px 24px", fontSize: 11 }} onClick={() => { setScr("exps"); loadExps(); }}>📁 Expedientes Drive</button>
-          <div style={{ fontSize: 8, fontFamily: "monospace", padding: "6px 0", color: driveReady ? "#60b060" : "#666" }}>
-            {driveReady ? "✓ Google Drive conectado" : (
-              <button style={{ ...B(false), padding: "10px 20px", fontSize: 10, borderColor: "rgba(100,160,100,.3)", color: "#60b060" }} onClick={connectDrive}>
-                🔗 Conectar Google Drive
-              </button>
-            )}
-          </div>
         </div>
       </div>
     </Wrap>
@@ -567,9 +471,6 @@ export default function App() {
             autoComplete="off" autoCorrect="off" spellCheck={false}
             onChange={e => codeRef.current = e.target.value.trim()}
             onBlur={e => { codeRef.current = e.target.value.trim(); setCodeD(e.target.value.trim()); }} />
-          <div style={{ fontSize: 8, color: "#2a2820", fontFamily: "monospace", marginTop: 7 }}>
-            Drive: <span style={{ color: G }}>{projRef.current || projD || "Proyecto"}</span> / <span style={{ color: "#555" }}>{codeRef.current || codeD || "CAL-01"}_{today}</span>
-          </div>
         </div>
         <button style={{ ...B(true), width: "100%", padding: "15px", fontSize: 12 }}
           onClick={() => { const p = projRef.current || projD, c = codeRef.current || codeD; if (p && c) setScr("capture"); else alert("Completa los dos campos"); }}>
@@ -587,9 +488,7 @@ export default function App() {
           <span style={{ color: G }}>{projRef.current || projD}</span> / {codeRef.current || codeD}
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16 }}>
-          <button style={{ ...B(gps ? true : false, true), flexShrink: 0 }} onClick={fetchGPS}>
-            {gps ? "📍 GPS ✓" : "📍 GPS"}
-          </button>
+          <button style={{ ...B(gps ? true : false, true), flexShrink: 0 }} onClick={fetchGPS}>{gps ? "📍 GPS ✓" : "📍 GPS"}</button>
           <span style={{ fontSize: 9, color: gps ? "#60b060" : "#666", fontFamily: "monospace", lineHeight: 1.5 }}>
             {gps ? `${gps.lat}, ${gps.lon} · Alt:${gps.alt}` : gpsStatus || "Actualizando…"}
           </span>
@@ -643,7 +542,6 @@ export default function App() {
     return (
       <Wrap back={home}>
         <div style={{ padding: "16px 20px" }}>
-          {/* Header info */}
           <div style={{ marginBottom: 12 }}>
             <span style={{ fontSize: 14, color: G, fontFamily: "monospace", fontWeight: 700 }}>{p}</span>
             <span style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}> / {c}</span>
@@ -655,8 +553,7 @@ export default function App() {
 
           {/* MONTEA_COLOR calibración */}
           <div style={{ marginBottom: 12, border: "1px solid rgba(200,169,110,.15)", borderRadius: 4, overflow: "hidden" }}>
-            <button
-              onClick={() => setShowCalibPanel(v => !v)}
+            <button onClick={() => setShowCalibPanel(v => !v)}
               style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: calibrationActive ? "rgba(200,169,110,.08)" : "rgba(255,255,255,.02)", border: "none", cursor: "pointer", textAlign: "left" }}>
               <div style={{ width: 20, height: 20, background: refHex, borderRadius: 3, border: "1px solid rgba(255,255,255,.2)", flexShrink: 0 }} />
               <span style={{ fontSize: 9, color: G, fontFamily: "monospace", letterSpacing: ".1em", textTransform: "uppercase" }}>MONTEA_COLOR</span>
@@ -669,8 +566,6 @@ export default function App() {
                   El color de control MONTEA_COLOR corrige la variación de iluminación (luz natural, sombra, filtros).<br/>
                   Indica cómo aparece este azul en tu foto para calibrar automáticamente todas las capas.
                 </div>
-
-                {/* Ref color */}
                 <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
                   <div>
                     <div style={{ fontSize: 8, color: "#555", fontFamily: "monospace", marginBottom: 4 }}>COLOR REFERENCIA</div>
@@ -707,22 +602,16 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-
                 {calibInfo && calibrationActive && (
                   <div style={{ padding: "6px 10px", background: "rgba(200,169,110,.06)", borderRadius: 3, fontSize: 8, fontFamily: "monospace", color: "#888", marginBottom: 10 }}>
                     Corrección LAB: ΔL {calibInfo.dL} · Δa {calibInfo.da} · Δb {calibInfo.db}
                   </div>
                 )}
-
                 <div style={{ display: "flex", gap: 10 }}>
                   {!calibrationActive ? (
-                    <button onClick={() => setCalibrationActive(true)} style={{ ...B(true, true), fontSize: 10, padding: "10px 16px" }}>
-                      ⚖ Aplicar calibración
-                    </button>
+                    <button onClick={() => setCalibrationActive(true)} style={{ ...B(true, true), fontSize: 10, padding: "10px 16px" }}>⚖ Aplicar calibración</button>
                   ) : (
-                    <button onClick={() => setCalibrationActive(false)} style={{ ...B(false, true), fontSize: 10, padding: "10px 16px", color: "#e07070", borderColor: "rgba(200,80,80,.3)" }}>
-                      ✕ Desactivar
-                    </button>
+                    <button onClick={() => setCalibrationActive(false)} style={{ ...B(false, true), fontSize: 10, padding: "10px 16px", color: "#e07070", borderColor: "rgba(200,80,80,.3)" }}>✕ Desactivar</button>
                   )}
                 </div>
               </div>
@@ -733,23 +622,18 @@ export default function App() {
           <div style={{ marginBottom: 12, padding: "10px 14px", background: allDocumented ? "rgba(60,180,80,.07)" : "rgba(200,169,110,.04)", border: `1px solid ${allDocumented ? "rgba(60,180,80,.3)" : "rgba(200,169,110,.15)"}`, borderRadius: 4, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 9, color: allDocumented ? "#4cc87a" : G, fontFamily: "monospace", letterSpacing: ".08em" }}>
-                {allDocumented ? "✓ TODAS LAS CAPAS DOCUMENTADAS" : `DOCUMENTACIÓN DE CAMPO · ${docCount}/${activeLayers.length} capas`}
+                {allDocumented ? "✓ TODAS LAS CAPAS DOCUMENTADAS" : `DOCUMENTACIÓN · ${docCount}/${activeLayers.length} capas`}
               </div>
               <div style={{ fontSize: 8, color: "#444", fontFamily: "monospace", marginTop: 3 }}>
-                {allDocumented ? "Listo para exportar PDF y guardar en Drive" : "Toca cada cuadrado de color para dictar o escribir observaciones"}
+                {allDocumented ? "Listo para exportar PDF y CSV" : "Toca cada cuadrado de color para dictar o escribir observaciones"}
               </div>
             </div>
-            {/* Progress dots */}
             <div style={{ display: "flex", gap: 3, flexWrap: "wrap", maxWidth: 80, justifyContent: "flex-end" }}>
               {activeLayers.map((_, i) => (
                 <div key={i} onClick={() => setActiveNoteLayer(i)} style={{ width: 10, height: 10, borderRadius: "50%", background: (layerNotes[i] || "").trim() ? "#4cc87a" : "#e07840", cursor: "pointer", border: "1px solid rgba(0,0,0,.2)" }} />
               ))}
             </div>
           </div>
-
-          {saveMsg && <div style={{ padding: "10px 14px", background: saveMsg.startsWith("✅") ? "rgba(60,180,80,.07)" : "rgba(180,60,0,.07)", border: `1px solid ${saveMsg.startsWith("✅") ? "rgba(60,180,80,.3)" : "rgba(180,60,0,.3)"}`, borderRadius: 3, fontSize: 10, fontFamily: "monospace", color: saveMsg.startsWith("✅") ? "#7ac87a" : "#c88060", marginBottom: 12, whiteSpace: "pre-line" }}>
-            {saveMsg}
-          </div>}
 
           {/* Franja de colores */}
           <div style={{ display: "flex", height: 20, borderRadius: 3, overflow: "hidden", marginBottom: 12, border: "1px solid rgba(255,255,255,.07)" }}>
@@ -759,7 +643,7 @@ export default function App() {
             ✦ MC 1M P50 CIE-LAB · {activeLayers.length} capas{calibrationActive ? " · ⚖ MONTEA_COLOR calibrado" : ""}{copied && <span style={{ marginLeft: 10 }}>✓ {copied}</span>}
           </div>
 
-          {/* Layout tabla */}
+          {/* Tabla */}
           <div style={{ display: "grid", gridTemplateColumns: imgData ? "min(130px,24%) 1fr" : "1fr", gap: 14, alignItems: "start", marginBottom: 16 }}>
             {imgData && (
               <div style={{ position: "sticky", top: 10 }}>
@@ -793,20 +677,17 @@ export default function App() {
 
           {/* Acciones */}
           <div style={{ borderTop: "1px solid rgba(255,255,255,.07)", paddingTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            <button
-              style={{ ...B(allDocumented, false), width: "100%", padding: "16px", fontSize: 12, opacity: saving ? .5 : 1, position: "relative" }}
-              onClick={handleSave} disabled={saving}>
-              {saving ? (saveMsg.split("\n")[0] || "Guardando…") : allDocumented ? "🖨 PDF  +  📁 Drive" : `🖨 PDF  +  📁 Drive  (faltan ${activeLayers.length - docCount} notas)`}
+            <button style={{ ...B(allDocumented, false), width: "100%", padding: "16px", fontSize: 12 }} onClick={dlPDF}>
+              {allDocumented ? "🖨 Exportar PDF" : `🖨 PDF  (faltan ${activeLayers.length - docCount} notas)`}
             </button>
             <div style={{ display: "flex", gap: 10 }}>
               <button style={{ ...B(false), flex: 1, fontSize: 10 }} onClick={dlCSV}>↓ CSV</button>
-              <button style={{ ...B(false), flex: 1, fontSize: 10 }} onClick={() => { setScr("capture"); setSaveMsg(""); }}>← Foto</button>
+              <button style={{ ...B(false), flex: 1, fontSize: 10 }} onClick={() => setScr("capture")}>← Foto</button>
               <button style={{ ...B(false), flex: 1, fontSize: 10 }} onClick={home}>⌂</button>
             </div>
           </div>
         </div>
 
-        {/* Modal documentación */}
         {activeNoteLayer !== null && activeLayers[activeNoteLayer] && (
           <LayerDocModal
             layer={activeLayers[activeNoteLayer]}
@@ -819,205 +700,6 @@ export default function App() {
       </Wrap>
     );
   }
-
-  // ── EXPEDIENTES: lista de proyectos ──────────────────────────────────────────
-  if (scr === "exps") return (
-    <Wrap back={home}>
-      <div style={{ padding: "20px 24px", maxWidth: 520 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <span style={{ fontSize: 10, color: "#444", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: ".1em" }}>
-            📁 Proyectos · {exps.length}
-          </span>
-          <button style={B(false, true)} onClick={loadExps}>↺</button>
-        </div>
-        {expLoading && <div style={{ fontSize: 11, color: "#555", fontFamily: "monospace", padding: "20px 0" }}>Cargando…</div>}
-        {!expLoading && exps.length === 0 && (
-          <div style={{ fontSize: 11, color: "#333", fontFamily: "monospace", fontStyle: "italic", padding: "24px 0" }}>
-            Sin proyectos aún. Crea tu primera cala.
-          </div>
-        )}
-        {exps.map((proj, i) => (
-          <button key={i}
-            onClick={() => { setSelProj(proj); setSelCala(null); setCalas([]); setScr("calas"); loadCalas(proj.id); }}
-            style={{ display: "block", width: "100%", background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 4, padding: "16px", marginBottom: 8, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
-            <div style={{ fontSize: 13, color: G, fontFamily: "monospace", fontWeight: 700 }}>📁 {proj.name}</div>
-            <div style={{ fontSize: 8, color: "#444", fontFamily: "monospace", marginTop: 4 }}>
-              Creado: {new Date(proj.createdTime).toLocaleString("es")}
-            </div>
-          </button>
-        ))}
-        <div style={{ marginTop: 20 }}>
-          <button style={{ ...B(true), width: "100%" }} onClick={() => { setScr("meta"); reset(); }}>+ Nueva Cala</button>
-        </div>
-      </div>
-    </Wrap>
-  );
-
-  // ── EXPEDIENTES: calas de un proyecto ─────────────────────────────────────────
-  if (scr === "calas") return (
-    <Wrap back={() => { setScr("exps"); loadExps(); }}>
-      <div style={{ padding: "20px 24px", maxWidth: 520 }}>
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 14, color: G, fontFamily: "monospace", fontWeight: 700 }}>📁 {selProj?.name}</div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-            <span style={{ fontSize: 9, color: "#444", fontFamily: "monospace" }}>{calas.length} calas</span>
-            <button style={B(false, true)} onClick={() => loadCalas(selProj.id)}>↺</button>
-          </div>
-        </div>
-        {expLoading && <div style={{ fontSize: 11, color: "#555", fontFamily: "monospace", padding: "16px 0" }}>Cargando calas…</div>}
-        {!expLoading && calas.length === 0 && (
-          <div style={{ fontSize: 11, color: "#333", fontFamily: "monospace", fontStyle: "italic", padding: "20px 0" }}>
-            Sin calas en este proyecto.
-          </div>
-        )}
-        {calas.map((cala, i) => {
-          const parts = cala.name.split("__");
-          const code = parts[0] || cala.name;
-          const date = parts[1] || "";
-          return (
-            <div key={i} style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
-              <button
-                onClick={() => { setSelCala(cala); setScr("ficha"); loadFicha(cala.id); }}
-                style={{ display: "block", width: "100%", padding: "14px 16px", cursor: "pointer", textAlign: "left", background: "transparent", border: "none", WebkitTapHighlightColor: "transparent" }}>
-                <div style={{ fontSize: 12, color: "#e8e4d4", fontFamily: "monospace", fontWeight: 600 }}>📋 {code}</div>
-                <div style={{ fontSize: 8, color: "#555", fontFamily: "monospace", marginTop: 4 }}>
-                  {date && `Fecha: ${date}`} · Toca para ver ficha →
-                </div>
-              </button>
-              <div style={{ borderTop: "1px solid rgba(255,255,255,.05)", padding: "8px 16px", display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  onClick={async () => {
-                    if (!confirm(`¿Eliminar cala "${cala.name}"?\nSe moverá a la papelera de Drive.`)) return;
-                    try { await trashItem(cala.id); loadCalas(selProj.id); }
-                    catch (e) { alert("Error: " + e.message); }
-                  }}
-                  style={{ ...B(false, true), fontSize: 9, color: "#c87a7a", borderColor: "rgba(200,80,80,.2)" }}>
-                  🗑 Eliminar
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
-          <button style={{ ...B(true), flex: 1 }} onClick={() => {
-            setProjD(selProj.name); projRef.current = selProj.name;
-            setScr("meta");
-          }}>+ Nueva Cala en {selProj?.name}</button>
-        </div>
-      </div>
-    </Wrap>
-  );
-
-  // ── EXPEDIENTES: ficha de una cala ────────────────────────────────────────────
-  if (scr === "ficha") return (
-    <Wrap back={() => { setScr("calas"); }}>
-      <div style={{ padding: "16px 20px" }}>
-        {expLoading && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 0", gap: 12 }}>
-            <div style={{ fontSize: 9, color: G, fontFamily: "monospace" }}>Cargando ficha…</div>
-            <div style={{ display: "flex", gap: 3 }}>
-              {[...Array(8)].map((_, i) => <div key={i} style={{ width: 8, height: 8, borderRadius: 2, background: G, opacity: .3, animation: `pulse 1.2s ease-in-out ${i * .15}s infinite` }} />)}
-            </div>
-          </div>
-        )}
-        {!expLoading && fichaData && (
-          <>
-            <div style={{ marginBottom: 12 }}>
-              <span style={{ fontSize: 14, color: G, fontFamily: "monospace", fontWeight: 700 }}>{fichaData.proyecto}</span>
-              <span style={{ fontSize: 10, color: "#555", fontFamily: "monospace" }}> / {fichaData.codigo}</span>
-              <span style={{ fontSize: 8, color: "#2a2820", fontFamily: "monospace" }}> · {fichaData.capas?.length || 0} capas · {fichaData.fecha}</span>
-            </div>
-            {fichaData.gps?.latitud !== "N/A" && (
-              <div style={{ padding: "6px 10px", background: "rgba(0,100,50,.06)", border: "1px solid rgba(0,150,80,.2)", borderRadius: 3, fontSize: 8, fontFamily: "monospace", color: "#60b060", marginBottom: 10 }}>
-                📍 Lat:{fichaData.gps.latitud} Lon:{fichaData.gps.longitud} · Alt:{fichaData.gps.altimetria} · Prec:{fichaData.gps.precision}
-              </div>
-            )}
-            {fichaData.metadatos_foto && (
-              <div style={{ padding: "7px 10px", background: "rgba(200,169,110,.04)", border: "1px solid rgba(200,169,110,.1)", borderRadius: 3, fontSize: 8, fontFamily: "monospace", color: "#555", marginBottom: 10, lineHeight: 2 }}>
-                📐 {fichaData.metadatos_foto.resolucion} · {fichaData.metadatos_foto.dispositivo}<br />
-                📅 {fichaData.metadatos_foto.fecha_foto}
-                {fichaData.metadatos_foto.iluminacion_medida && <> · 💡 {fichaData.metadatos_foto.iluminacion_medida}</>}
-              </div>
-            )}
-            {fichaImg && (
-              <img src={fichaImg} alt="Cala" style={{ maxWidth: "100%", maxHeight: 300, objectFit: "contain", borderRadius: 4, border: "1px solid rgba(255,255,255,.08)", display: "block", marginBottom: 12 }} />
-            )}
-            <div style={{ display: "flex", height: 18, borderRadius: 3, overflow: "hidden", marginBottom: 6, border: "1px solid rgba(255,255,255,.07)" }}>
-              {fichaData.capas?.map((l, i) => <div key={i} style={{ flex: 1, background: l.hex }} title={`C${l.numero}: ${l.nombre}`} />)}
-            </div>
-            <div style={{ fontSize: 7.5, color: G, fontFamily: "monospace", marginBottom: 12 }}>
-              ✦ {fichaData.capas?.length} capas · {fichaData.motor}
-            </div>
-            <div style={{ overflowX: "auto", marginBottom: 16 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 360 }}>
-                <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,.12)" }}>
-                    {["#", "Color", "Nombre", "HEX", "NCS", "RAL", "American Colors"].map(h => (
-                      <th key={h} style={{ padding: "6px 8px", textAlign: "left", fontSize: 7, color: "#555", letterSpacing: ".1em", textTransform: "uppercase", background: "rgba(200,169,110,.06)", fontWeight: 400 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {fichaData.capas?.map((l, i) => {
-                    const lum = l.rgb ? (l.rgb.r * 299 + l.rgb.g * 587 + l.rgb.b * 114) / 1000 : 128;
-                    const fg = lum > 140 ? "#111" : "#fff";
-                    return (
-                      <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,.05)" }}>
-                        <td style={{ padding: "6px 8px", color: G, fontWeight: 900, fontSize: 14 }}>{l.numero}</td>
-                        <td style={{ padding: "6px 6px" }}>
-                          <div onClick={() => copyVal(l.hex)} style={{ width: 36, height: 36, background: l.hex, borderRadius: 3, border: "1px solid rgba(255,255,255,.15)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <span style={{ color: fg, fontSize: 5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{l.hex}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: "6px 8px", color: "#a09070", fontWeight: 600, fontSize: 9, whiteSpace: "nowrap" }}>{l.nombre}</td>
-                        <td style={{ padding: "6px 8px", color: G, fontWeight: 700, fontSize: 9, cursor: "pointer" }} onClick={() => copyVal(l.hex)}>{copied === l.hex ? "✓" : l.hex}</td>
-                        <td style={{ padding: "6px 8px", color: "#5090d0", fontSize: 8.5, whiteSpace: "nowrap" }}>{l.ncs}</td>
-                        <td style={{ padding: "6px 8px", color: "#bbb", fontSize: 8, whiteSpace: "nowrap" }}>{l.ral}</td>
-                        <td style={{ padding: "6px 8px", color: "#5580bb", fontSize: 8 }}>{l.american_colors}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {/* Notas guardadas */}
-            {fichaData.capas?.some(l => l.notas) && (
-              <div style={{ marginBottom: 16, padding: "12px 14px", background: "rgba(200,169,110,.04)", border: "1px solid rgba(200,169,110,.12)", borderRadius: 4 }}>
-                <div style={{ fontSize: 8, color: G, fontFamily: "monospace", letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 8 }}>Observaciones de campo</div>
-                {fichaData.capas?.map((l, i) => l.notas ? (
-                  <div key={i} style={{ marginBottom: 8, display: "flex", gap: 10 }}>
-                    <span style={{ fontSize: 9, color: G, fontFamily: "monospace", fontWeight: 700, flexShrink: 0, width: 20 }}>{l.numero}</span>
-                    <span style={{ fontSize: 9, color: "#888", fontFamily: "monospace", lineHeight: 1.6 }}>{l.notas}</span>
-                  </div>
-                ) : null)}
-              </div>
-            )}
-            <div style={{ borderTop: "1px solid rgba(255,255,255,.07)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-              <button style={{ ...B(true), width: "100%", padding: "14px" }}
-                onClick={() => openPDF(fichaData.proyecto, fichaData.codigo, fichaData.fecha,
-                  fichaData.capas?.map(l => ({ pos: l.numero, name: l.nombre, hex: l.hex, ncs: l.ncs, ral: l.ral, ralDE: l.ral_dE || "—", american: l.american_colors, rgb: l.rgb || { r: 128, g: 128, b: 128 }, lab: l.lab || {} })) || [],
-                  fichaImg, fichaData.metadatos_foto, fichaData.gps,
-                  Object.fromEntries((fichaData.capas || []).map((l, i) => [i, l.notas || ""])), null)}>
-                🖨 Imprimir PDF
-              </button>
-              <button style={{ ...B(false, true), color: "#c87a7a", borderColor: "rgba(200,80,80,.25)", padding: "11px" }}
-                onClick={async () => {
-                  if (!confirm(`¿Eliminar cala "${selCala?.name}"?\nSe moverá a la papelera de Drive.`)) return;
-                  try { await trashItem(selCala.id); setScr("calas"); loadCalas(selProj.id); }
-                  catch (e) { alert("Error: " + e.message); }
-                }}>
-                🗑 Eliminar esta cala
-              </button>
-              <button style={{ ...B(true), padding: "11px" }}
-                onClick={() => { setProjD(fichaData.proyecto); projRef.current = fichaData.proyecto; setScr("meta"); }}>
-                + Nueva Cala en {fichaData.proyecto}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </Wrap>
-  );
 
   return null;
 }
