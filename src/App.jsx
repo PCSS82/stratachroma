@@ -540,8 +540,12 @@ export default function App() {
   const [showCalib, setShowCalib]   = useState(false);
   const [editingRef, setEditingRef] = useState(false);
 
-  const handleMicAuthorize = () => {
+  const handleMicAuthorize = async () => {
     localStorage.setItem("sc_mic_consent", "granted");
+    try {
+      const stream = await navigator.mediaDevices?.getUserMedia({ audio: true });
+      stream?.getTracks().forEach(t => t.stop());
+    } catch {}
     setScr("home");
   };
 
