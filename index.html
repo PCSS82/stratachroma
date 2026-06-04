@@ -11,26 +11,40 @@
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       html, body { background: #0d0c0a; color: #d4d0c0; min-height: 100vh; }
       #root { min-height: 100vh; }
-
-      /* Splash visible hasta que React monte algo en #root */
       #splash {
         position: fixed; inset: 0; background: #0d0c0a; z-index: 9999;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 16px; pointer-events: none;
+        font-family: 'Courier New', monospace;
       }
-      /* Ocultar splash cuando #root tiene contenido React */
       #root:not(:empty) ~ #splash { display: none; }
+      #splash-err {
+        font-size: 9px; color: #e07870; max-width: 320px; text-align: center;
+        line-height: 1.8; margin-top: 8px; display: none;
+      }
     </style>
+    <!-- Captura errores JS antes de que React monte -->
+    <script>
+      window.addEventListener('error', function(e) {
+        var el = document.getElementById('splash-err');
+        if (el) { el.style.display = 'block'; el.textContent = e.message + ' (' + (e.filename||'').split('/').pop() + ':' + e.lineno + ')'; }
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var el = document.getElementById('splash-err');
+        if (el) { el.style.display = 'block'; el.textContent = String(e.reason?.message || e.reason || 'Promise rejected'); }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <div id="splash">
-      <div style="font-size:22px;font-weight:300;color:#e8e4d4;letter-spacing:.05em;font-family:'Courier New',monospace">
+      <div style="font-size:22px;font-weight:300;color:#e8e4d4;letter-spacing:.05em">
         STRATA<b style="color:#c8a96e">CHROMA</b>
       </div>
-      <div style="font-size:10px;color:#666;letter-spacing:.15em;font-family:monospace;text-transform:uppercase">
+      <div style="font-size:10px;color:#666;letter-spacing:.15em;text-transform:uppercase">
         Cargando&hellip;
       </div>
+      <div id="splash-err"></div>
     </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
