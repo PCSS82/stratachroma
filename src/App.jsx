@@ -286,6 +286,7 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
     try {
       const stream = await navigator.mediaDevices?.getUserMedia({ audio: true });
       stream?.getTracks().forEach(t => t.stop());
+      await new Promise(r => setTimeout(r, 300));
     } catch {
       setMicError("Micrófono bloqueado — toca el icono 🔒 en tu navegador y permite el acceso, luego vuelve a intentarlo.");
       return;
@@ -901,15 +902,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Franja de colores */}
-          <div style={{ display:"flex", height:20, borderRadius:3, overflow:"hidden", marginBottom:12, border:`1px solid ${BORDER}` }}>
-            {activeLayers.map((l,i) => <div key={i} style={{ flex:1, background:l.hex }} title={`C${l.pos}: ${l.name}`} />)}
-          </div>
-          <div style={{ fontSize:8, color:GOLD, fontFamily:"monospace", marginBottom:14 }}>
-            ✦ MC 1M P50 CIE-LAB · {activeLayers.length} capas{calibActive?" · ⚖ MONTEA_COLOR calibrado":""}
-            {copied && <span style={{ marginLeft:10 }}>✓ {copied}</span>}
-          </div>
-
           {/* Foto + Tabla lado a lado */}
           <div style={{ display:"grid", gridTemplateColumns:imgData?"min(120px,22%) 1fr":"1fr", gap:14, alignItems:"start", marginBottom:16 }}>
             {imgData && (
@@ -926,6 +918,14 @@ export default function App() {
               </div>
             )}
             <div>
+              {/* Franja de colores — al lado derecho de la imagen */}
+              <div style={{ display:"flex", height:18, borderRadius:3, overflow:"hidden", marginBottom:6, border:`1px solid ${BORDER}` }}>
+                {activeLayers.map((l,i) => <div key={i} style={{ flex:1, background:l.hex }} title={`C${l.pos}: ${l.name}`} />)}
+              </div>
+              <div style={{ fontSize:8, color:GOLD, fontFamily:"monospace", marginBottom:10 }}>
+                ✦ MC 1M P50 CIE-LAB · {activeLayers.length} capas{calibActive?" · ⚖ MONTEA_COLOR calibrado":""}
+                {copied && <span style={{ marginLeft:10 }}>✓ {copied}</span>}
+              </div>
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead>
                   <tr style={{ borderBottom:`1px solid ${BORDER}` }}>
