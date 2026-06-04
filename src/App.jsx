@@ -516,6 +516,11 @@ export default function App() {
       return "mic-permission";
     }
   });
+
+  useEffect(() => {
+    const el = document.getElementById("splash");
+    if (el) el.style.display = "none";
+  }, []);
   const projRef = useRef(""), codeRef = useRef("");
   const [projD, setProjD] = useState(""), [codeD, setCodeD] = useState("");
   const [imgData, setImgData]   = useState(null);
@@ -535,12 +540,8 @@ export default function App() {
   const [showCalib, setShowCalib]   = useState(false);
   const [editingRef, setEditingRef] = useState(false);
 
-  const handleMicAuthorize = async () => {
+  const handleMicAuthorize = () => {
     localStorage.setItem("sc_mic_consent", "granted");
-    try {
-      const stream = await navigator.mediaDevices?.getUserMedia({ audio: true });
-      stream?.getTracks().forEach(t => t.stop());
-    } catch {}
     setScr("home");
   };
 
