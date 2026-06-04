@@ -3,23 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0d0c0a" />
+    <meta name="theme-color" content="#070711" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>StrataChroma</title>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      html, body { background: #0d0c0a; color: #d4d0c0; min-height: 100vh; }
+      html, body { background: #070711; color: #c0e0f8; min-height: 100vh; }
       #root { min-height: 100vh; }
       #splash {
-        position: fixed; inset: 0; background: #0d0c0a; z-index: 9999;
+        position: fixed; inset: 0; background: #070711; z-index: 9999;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 16px; pointer-events: none;
         font-family: 'Courier New', monospace;
       }
       #root:not(:empty) ~ #splash { display: none; }
       #splash-err {
-        font-size: 9px; color: #e07870; max-width: 320px; text-align: center;
+        font-size: 9px; color: #ff4466; max-width: 320px; text-align: center;
         line-height: 1.8; margin-top: 8px; display: none;
       }
     </style>
@@ -53,9 +53,9 @@
     <div id="root"></div>
     <div id="splash">
       <div style="font-size:22px;font-weight:300;color:#e8e4d4;letter-spacing:.05em">
-        STRATA<b style="color:#c8a96e">CHROMA</b>
+        STRATA<b style="color:#00ffcc;text-shadow:0 0 18px #00ffcc">CHROMA</b>
       </div>
-      <div style="font-size:10px;color:#666;letter-spacing:.15em;text-transform:uppercase">
+      <div style="font-size:10px;color:#283a4e;letter-spacing:.15em;text-transform:uppercase">
         Cargando&hellip;
       </div>
       <div id="splash-err"></div>

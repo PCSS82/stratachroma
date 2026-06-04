@@ -145,17 +145,17 @@ function openPDF(proj, code, date, layers, imgUrl, meta, notes, calibInfo) {
 }
 
 // ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
-const GOLD = "#c8a96e";
-const BG   = "#0d0c0a";
-const TEXT  = "#e8e4d4";
-const TEXT2 = "#a09070";
-const MUTED = "#666";
-const BORDER      = "rgba(255,255,255,.1)";
-const BORDER_GOLD = "rgba(200,169,110,.35)";
+const GOLD = "#00ffcc";
+const BG   = "#070711";
+const TEXT  = "#c0e0f8";
+const TEXT2 = "#405870";
+const MUTED = "#283a4e";
+const BORDER      = "rgba(0,200,255,.1)";
+const BORDER_GOLD = "rgba(0,255,200,.3)";
 
 const btn = (active, small) => ({
-  background: active ? "rgba(200,169,110,.14)" : "rgba(255,255,255,.05)",
-  border: `1px solid ${active ? BORDER_GOLD : BORDER}`,
+  background: active ? "rgba(0,255,200,.08)" : "rgba(0,150,200,.04)",
+  border: `1px solid ${active ? "rgba(0,255,200,.5)" : "rgba(0,150,200,.18)"}`,
   color: active ? GOLD : TEXT2,
   padding: small ? "8px 16px" : "12px 24px",
   fontFamily: "'Courier New',monospace",
@@ -167,6 +167,7 @@ const btn = (active, small) => ({
   transition: "all .15s",
   lineHeight: 1,
   WebkitTapHighlightColor: "transparent",
+  boxShadow: active ? "0 0 12px rgba(0,255,200,.18)" : "none",
 });
 
 const inp = {
@@ -194,13 +195,13 @@ const lbl = {
 
 // ─── HEADER ───────────────────────────────────────────────────────────────────
 const Hdr = memo(({ back }) => (
-  <div style={{ borderBottom: `1px solid ${BORDER}`, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: BG }}>
+  <div style={{ borderBottom: `1px solid ${BORDER}`, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: BG, boxShadow: "0 2px 24px rgba(0,200,255,.08)" }}>
     <div>
       <div style={{ fontSize: 9, color: MUTED, fontFamily: "monospace", letterSpacing: "0.14em", marginBottom: 2 }}>
         STRATACHROMA · v22 · MC 1M P50 CIE-LAB · EXIF · MONTEA_COLOR
       </div>
       <h1 style={{ fontSize: 22, fontWeight: 300, color: TEXT, margin: 0, letterSpacing: ".05em" }}>
-        STRATA<span style={{ color: GOLD }}>CHROMA</span>
+        STRATA<span style={{ color: GOLD, textShadow: "0 0 20px #00ffcc" }}>CHROMA</span>
       </h1>
     </div>
     {back && <button style={btn(false, true)} onClick={back}>← Inicio</button>}
@@ -276,12 +277,19 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
     }
   };
 
-  const startRec = () => {
+  const startRec = async () => {
     if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
       setMicError("Dictado no disponible en este navegador. Usa Chrome o Safari.");
       return;
     }
     setMicError(null);
+    try {
+      const stream = await navigator.mediaDevices?.getUserMedia({ audio: true });
+      stream?.getTracks().forEach(t => t.stop());
+    } catch {
+      setMicError("Micrófono bloqueado — toca el icono 🔒 en tu navegador y permite el acceso, luego vuelve a intentarlo.");
+      return;
+    }
     activeRef.current = true;
     setRecording(true);
     listen.current();
@@ -344,7 +352,7 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
 
         {/* Error de micrófono (inline, sin alert) */}
         {micError && (
-          <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(180,60,60,.1)", border: "1px solid rgba(180,60,60,.3)", borderRadius: 3, fontSize: 9, color: "#e07870", fontFamily: "monospace", lineHeight: 1.6 }}>
+          <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(255,30,80,.08)", border: "1px solid rgba(255,30,80,.3)", borderRadius: 3, fontSize: 9, color: "#ff4466", fontFamily: "monospace", lineHeight: 1.6 }}>
             ⚠ {micError}
           </div>
         )}
@@ -358,14 +366,14 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
               padding: "12px 20px",
               fontSize: 11,
               minWidth: 150,
-              background: recording ? "rgba(180,60,60,.2)" : "rgba(255,255,255,.05)",
-              borderColor: recording ? "rgba(220,80,80,.5)" : BORDER,
-              color: recording ? "#e07070" : TEXT2,
+              background: recording ? "rgba(255,30,80,.15)" : "rgba(0,150,200,.04)",
+              borderColor: recording ? "rgba(255,30,80,.5)" : "rgba(0,150,200,.18)",
+              color: recording ? "#ff4466" : TEXT2,
             }}>
             {recording ? "⏹ Detener voz" : "🎙 Dictar nota"}
           </button>
           {recording && (
-            <span style={{ fontSize: 9, color: "#e07070", fontFamily: "monospace", animation: "blink 1s ease-in-out infinite" }}>
+            <span style={{ fontSize: 9, color: "#ff4466", fontFamily: "monospace", animation: "blink 1s ease-in-out infinite" }}>
               ● Escuchando…
             </span>
           )}
@@ -403,9 +411,9 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
         <div
           onClick={() => onOpenNote(layerIndex)}
           title={hasNote ? "Nota guardada — toca para editar" : "Toca para documentar esta capa"}
-          style={{ position: "relative", width: 38, height: 38, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(80,200,120,.6)" : "rgba(200,100,50,.5)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          style={{ position: "relative", width: 38, height: 38, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(0,255,136,.5)" : "rgba(255,30,80,.4)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ color: fg, fontSize: 4.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{layer.hex}</span>
-          <div style={{ position: "absolute", top: -5, right: -5, width: 12, height: 12, borderRadius: "50%", background: hasNote ? "#4cc87a" : "#e07840", border: `2px solid ${BG}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ position: "absolute", top: -5, right: -5, width: 12, height: 12, borderRadius: "50%", background: hasNote ? "#00ff88" : "#ff2255", border: `2px solid ${BG}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ fontSize: 6, color: "#fff", fontWeight: 900, lineHeight: 1 }}>{hasNote ? "✓" : "!"}</span>
           </div>
         </div>
@@ -416,9 +424,9 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
           <span style={{ fontSize: 8.5, color: GOLD, fontWeight: 700, cursor: "pointer" }} onClick={() => onCopy(layer.hex)}>
             {copied === layer.hex ? "✓ copiado" : layer.hex}
           </span>
-          <span style={{ fontSize: 8, color: "#5090d0" }}>{layer.ncs}</span>
+          <span style={{ fontSize: 8, color: "#22aaff" }}>{layer.ncs}</span>
           <span style={{ fontSize: 7.5, color: TEXT2 }}>{layer.ral} <span style={{ color: MUTED, fontSize: 7 }}>ΔE{layer.ralDE}</span></span>
-          <span style={{ fontSize: 7.5, color: "#5580bb" }}>{layer.american}</span>
+          <span style={{ fontSize: 7.5, color: "#ff22bb" }}>{layer.american}</span>
         </div>
       </td>
     </tr>
@@ -498,7 +506,7 @@ const Wrap = ({ children, back }) => (
     <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>{children}</div>
     <style>{`
       ::-webkit-scrollbar{width:3px}
-      ::-webkit-scrollbar-thumb{background:rgba(200,169,110,.2)}
+      ::-webkit-scrollbar-thumb{background:rgba(0,255,200,.15)}
       input,textarea{-webkit-tap-highlight-color:transparent;-webkit-appearance:none}
       @keyframes pulse{0%,100%{opacity:.07}50%{opacity:.7}}
     `}</style>
@@ -780,7 +788,7 @@ export default function App() {
       </div>
       <div style={{ display:"flex", flexDirection:"column", gap:4, width:280 }}>
         {[...Array(14)].map((_,i) => (
-          <div key={i} style={{ height:6, borderRadius:1, background:`rgba(200,169,110,${0.08+(i/14)*0.14})`, animation:`pulse 1.8s ease-in-out ${i*.11}s infinite` }} />
+          <div key={i} style={{ height:6, borderRadius:1, background:`rgba(0,255,200,${0.08+(i/14)*0.5})`, animation:`pulse 1.8s ease-in-out ${i*.11}s infinite` }} />
         ))}
       </div>
       {status && <div style={{ fontSize:10, color:GOLD, fontFamily:"monospace", textAlign:"center", maxWidth:380, lineHeight:2.2, padding:"0 24px" }}>{status}</div>}
@@ -803,10 +811,10 @@ export default function App() {
 
           {/* GPS desde EXIF */}
           {gps
-            ? <div style={{ padding:"7px 12px", background:"rgba(0,100,50,.08)", border:"1px solid rgba(0,150,80,.2)", borderRadius:3, fontSize:9, fontFamily:"monospace", color:"#4cc87a", marginBottom:12 }}>
+            ? <div style={{ padding:"7px 12px", background:"rgba(0,255,136,.05)", border:"1px solid rgba(0,255,136,.2)", borderRadius:3, fontSize:9, fontFamily:"monospace", color:"#00ff88", marginBottom:12 }}>
                 📍 {gps.lat}, {gps.lon} · Alt: {gps.alt} <span style={{color:MUTED}}>(EXIF)</span>
               </div>
-            : <div style={{ padding:"7px 12px", background:"rgba(255,255,255,.02)", border:`1px solid ${BORDER}`, borderRadius:3, fontSize:9, fontFamily:"monospace", color:MUTED, marginBottom:12 }}>
+            : <div style={{ padding:"7px 12px", background:"rgba(0,150,200,.03)", border:`1px solid ${BORDER}`, borderRadius:3, fontSize:9, fontFamily:"monospace", color:MUTED, marginBottom:12 }}>
                 📍 Sin GPS — la foto no tiene coordenadas EXIF
               </div>
           }
@@ -817,7 +825,7 @@ export default function App() {
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:calibActive?"rgba(200,169,110,.08)":"rgba(255,255,255,.02)", border:"none", cursor:"pointer", textAlign:"left" }}>
               <div style={{ width:20, height:20, background:refHex, borderRadius:3, border:`1px solid ${BORDER}`, flexShrink:0 }} />
               <span style={{ fontSize:9, color:GOLD, fontFamily:"monospace", letterSpacing:".1em", textTransform:"uppercase" }}>MONTEA_COLOR</span>
-              {calibActive && <span style={{ fontSize:8, color:"#4cc87a", fontFamily:"monospace", marginLeft:4 }}>● Activa</span>}
+              {calibActive && <span style={{ fontSize:8, color:"#00ff88", fontFamily:"monospace", marginLeft:4 }}>● Activa</span>}
               <span style={{ fontSize:9, color:MUTED, marginLeft:"auto" }}>{showCalib?"▲":"▼"}</span>
             </button>
             {showCalib && (
@@ -876,9 +884,9 @@ export default function App() {
           </div>
 
           {/* Progreso documentación */}
-          <div style={{ marginBottom:12, padding:"10px 14px", background:allDocumented?"rgba(60,180,80,.07)":"rgba(200,169,110,.04)", border:`1px solid ${allDocumented?"rgba(60,180,80,.3)":BORDER_GOLD}`, borderRadius:4, display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ marginBottom:12, padding:"10px 14px", background:allDocumented?"rgba(0,255,136,.05)":"rgba(0,200,255,.03)", border:`1px solid ${allDocumented?"rgba(0,255,136,.25)":BORDER_GOLD}`, borderRadius:4, display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:9, color:allDocumented?"#4cc87a":GOLD, fontFamily:"monospace", letterSpacing:".08em" }}>
+              <div style={{ fontSize:9, color:allDocumented?"#00ff88":GOLD, fontFamily:"monospace", letterSpacing:".08em" }}>
                 {allDocumented ? "✓ TODAS LAS CAPAS DOCUMENTADAS" : `DOCUMENTACIÓN · ${docCount}/${activeLayers.length} capas`}
               </div>
               <div style={{ fontSize:8, color:TEXT2, fontFamily:"monospace", marginTop:3 }}>
@@ -888,7 +896,7 @@ export default function App() {
             <div style={{ display:"flex", gap:3, flexWrap:"wrap", maxWidth:80, justifyContent:"flex-end" }}>
               {activeLayers.map((_,i) => (
                 <div key={i} onClick={()=>setActiveNoteLayer(i)}
-                  style={{ width:10, height:10, borderRadius:"50%", background:(layerNotes[i]||"").trim()?"#4cc87a":"#e07840", cursor:"pointer", border:"1px solid rgba(0,0,0,.2)" }} />
+                  style={{ width:10, height:10, borderRadius:"50%", background:(layerNotes[i]||"").trim()?"#00ff88":"#ff2255", cursor:"pointer", border:"1px solid rgba(0,0,0,.4)", boxShadow:(layerNotes[i]||"").trim()?"0 0 4px #00ff88":"0 0 4px #ff2255" }} />
               ))}
             </div>
           </div>
@@ -902,39 +910,39 @@ export default function App() {
             {copied && <span style={{ marginLeft:10 }}>✓ {copied}</span>}
           </div>
 
-          {/* Foto */}
-          {imgData && (
-            <div style={{ marginBottom:14 }}>
-              <img src={imgData.url} alt="" style={{ width:"100%", borderRadius:4, border:`1px solid ${BORDER}` }} />
-              {imgMeta && (
-                <div style={{ marginTop:6, fontSize:7, color:TEXT2, fontFamily:"monospace", lineHeight:2 }}>
-                  <div>📐 {imgMeta.size}</div>
-                  <div>📅 {imgMeta.datetime}</div>
-                  {gps && <div style={{color:"#4cc87a"}}>📍 {gps.lat}, {gps.lon}</div>}
-                  {layers[0]?.bgInfo && <div>💡 {layers[0].bgInfo}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tabla */}
-          <div style={{ marginBottom:16 }}>
-            <table style={{ width:"100%", borderCollapse:"collapse" }}>
-              <thead>
-                <tr style={{ borderBottom:`1px solid ${BORDER}` }}>
-                  {["#","Color · Doc","Descripción"].map(h=>(
-                    <th key={h} style={{ padding:"6px 8px", textAlign:"left", fontSize:7.5, color:TEXT2, letterSpacing:".1em", textTransform:"uppercase", background:"rgba(200,169,110,.06)", fontWeight:400 }}>{h}</th>
+          {/* Foto + Tabla lado a lado */}
+          <div style={{ display:"grid", gridTemplateColumns:imgData?"min(120px,22%) 1fr":"1fr", gap:14, alignItems:"start", marginBottom:16 }}>
+            {imgData && (
+              <div style={{ position:"sticky", top:10 }}>
+                <img src={imgData.url} alt="" style={{ width:"100%", borderRadius:4, border:`1px solid ${BORDER}` }} />
+                {imgMeta && (
+                  <div style={{ marginTop:6, fontSize:7, color:TEXT2, fontFamily:"monospace", lineHeight:2 }}>
+                    <div>📐 {imgMeta.size}</div>
+                    <div>📅 {imgMeta.datetime}</div>
+                    {gps && <div style={{color:"#00ff88"}}>📍 {gps.lat}, {gps.lon}</div>}
+                    {layers[0]?.bgInfo && <div>💡 {layers[0].bgInfo}</div>}
+                  </div>
+                )}
+              </div>
+            )}
+            <div>
+              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom:`1px solid ${BORDER}` }}>
+                    {["#","Color · Doc","Descripción"].map(h=>(
+                      <th key={h} style={{ padding:"6px 8px", textAlign:"left", fontSize:7.5, color:TEXT2, letterSpacing:".1em", textTransform:"uppercase", background:"rgba(0,200,255,.05)", fontWeight:400 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeLayers.map((l,i)=>(
+                    <LayerRow key={i} layer={l} layerIndex={i} onCopy={copyVal} copied={copied}
+                      hasNote={(layerNotes[i]||"").trim().length>0}
+                      onOpenNote={setActiveNoteLayer} />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {activeLayers.map((l,i)=>(
-                  <LayerRow key={i} layer={l} layerIndex={i} onCopy={copyVal} copied={copied}
-                    hasNote={(layerNotes[i]||"").trim().length>0}
-                    onOpenNote={setActiveNoteLayer} />
-                ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Acciones */}
