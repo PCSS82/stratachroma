@@ -398,30 +398,28 @@ const LayerRow = memo(({ layer, layerIndex, onCopy, copied, hasNote, onOpenNote 
   const fg  = lum > 140 ? "#111" : "#fff";
   return (
     <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-      <td style={{ padding: "8px 10px", color: GOLD, fontWeight: 900, fontSize: 16, width: 36, textAlign: "center" }}>{layer.pos}</td>
-      <td style={{ padding: "8px 6px", width: 54 }}>
+      <td style={{ padding: "10px 6px 10px 10px", color: GOLD, fontWeight: 900, fontSize: 15, width: 26, textAlign: "center", verticalAlign: "middle" }}>{layer.pos}</td>
+      <td style={{ padding: "10px 6px", width: 46, verticalAlign: "middle" }}>
         <div
           onClick={() => onOpenNote(layerIndex)}
           title={hasNote ? "Nota guardada — toca para editar" : "Toca para documentar esta capa"}
-          style={{ position: "relative", width: 40, height: 40, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(80,200,120,.6)" : "rgba(200,100,50,.5)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ color: fg, fontSize: 5.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{layer.hex}</span>
+          style={{ position: "relative", width: 38, height: 38, background: layer.hex, borderRadius: 4, border: `2px solid ${hasNote ? "rgba(80,200,120,.6)" : "rgba(200,100,50,.5)"}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ color: fg, fontSize: 4.5, fontFamily: "monospace", fontWeight: 700, writingMode: "vertical-rl", transform: "rotate(180deg)", opacity: .8 }}>{layer.hex}</span>
           <div style={{ position: "absolute", top: -5, right: -5, width: 12, height: 12, borderRadius: "50%", background: hasNote ? "#4cc87a" : "#e07840", border: `2px solid ${BG}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ fontSize: 6, color: "#fff", fontWeight: 900, lineHeight: 1 }}>{hasNote ? "✓" : "!"}</span>
           </div>
         </div>
       </td>
-      <td style={{ padding: "8px 8px" }}>
-        <div style={{ fontSize: 10, color: TEXT2, fontWeight: 600, marginBottom: 3 }}>{layer.name}</div>
-        <div style={{ fontSize: 9, color: GOLD, fontWeight: 700, cursor: "pointer" }} onClick={() => onCopy(layer.hex)}>
-          {copied === layer.hex ? "✓ copiado" : layer.hex}
+      <td style={{ padding: "10px 10px 10px 4px", verticalAlign: "middle" }}>
+        <div style={{ fontSize: 10, color: TEXT, fontWeight: 600, marginBottom: 3, lineHeight: 1.3 }}>{layer.name}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 8.5, color: GOLD, fontWeight: 700, cursor: "pointer" }} onClick={() => onCopy(layer.hex)}>
+            {copied === layer.hex ? "✓ copiado" : layer.hex}
+          </span>
+          <span style={{ fontSize: 8, color: "#5090d0" }}>{layer.ncs}</span>
+          <span style={{ fontSize: 7.5, color: TEXT2 }}>{layer.ral} <span style={{ color: MUTED, fontSize: 7 }}>ΔE{layer.ralDE}</span></span>
+          <span style={{ fontSize: 7.5, color: "#5580bb" }}>{layer.american}</span>
         </div>
-      </td>
-      <td style={{ padding: "8px 6px" }}>
-        <div style={{ fontSize: 9, color: "#5090d0", marginBottom: 2 }}>{layer.ncs}</div>
-        <div style={{ fontSize: 8.5, color: TEXT2 }}>{layer.ral} <span style={{ color: MUTED, fontSize: 7 }}>ΔE{layer.ralDE}</span></div>
-      </td>
-      <td style={{ padding: "8px 8px" }}>
-        <div style={{ fontSize: 8, color: "#5580bb" }}>{layer.american}</div>
       </td>
     </tr>
   );
@@ -904,39 +902,39 @@ export default function App() {
             {copied && <span style={{ marginLeft:10 }}>✓ {copied}</span>}
           </div>
 
-          {/* Tabla */}
-          <div style={{ display:"grid", gridTemplateColumns:imgData?"min(130px,24%) 1fr":"1fr", gap:14, alignItems:"start", marginBottom:16 }}>
-            {imgData && (
-              <div style={{ position:"sticky", top:10 }}>
-                <img src={imgData.url} alt="" style={{ width:"100%", borderRadius:4, border:`1px solid ${BORDER}` }} />
-                {imgMeta && (
-                  <div style={{ marginTop:6, fontSize:7, color:TEXT2, fontFamily:"monospace", lineHeight:2 }}>
-                    <div>📐 {imgMeta.size}</div>
-                    <div>📅 {imgMeta.datetime}</div>
-                    {gps && <div style={{color:"#4cc87a"}}>📍 {gps.lat}, {gps.lon}</div>}
-                    {layers[0]?.bgInfo && <div>💡 {layers[0].bgInfo}</div>}
-                  </div>
-                )}
-              </div>
-            )}
-            <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", minWidth:380 }}>
-                <thead>
-                  <tr style={{ borderBottom:`1px solid ${BORDER}` }}>
-                    {["#","Color · Doc","Nombre / Códigos","NCS · RAL","American Colors"].map(h=>(
-                      <th key={h} style={{ padding:"6px 8px", textAlign:"left", fontSize:7.5, color:TEXT2, letterSpacing:".1em", textTransform:"uppercase", background:"rgba(200,169,110,.06)", fontWeight:400 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeLayers.map((l,i)=>(
-                    <LayerRow key={i} layer={l} layerIndex={i} onCopy={copyVal} copied={copied}
-                      hasNote={(layerNotes[i]||"").trim().length>0}
-                      onOpenNote={setActiveNoteLayer} />
-                  ))}
-                </tbody>
-              </table>
+          {/* Foto */}
+          {imgData && (
+            <div style={{ marginBottom:14 }}>
+              <img src={imgData.url} alt="" style={{ width:"100%", borderRadius:4, border:`1px solid ${BORDER}` }} />
+              {imgMeta && (
+                <div style={{ marginTop:6, fontSize:7, color:TEXT2, fontFamily:"monospace", lineHeight:2 }}>
+                  <div>📐 {imgMeta.size}</div>
+                  <div>📅 {imgMeta.datetime}</div>
+                  {gps && <div style={{color:"#4cc87a"}}>📍 {gps.lat}, {gps.lon}</div>}
+                  {layers[0]?.bgInfo && <div>💡 {layers[0].bgInfo}</div>}
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Tabla */}
+          <div style={{ marginBottom:16 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ borderBottom:`1px solid ${BORDER}` }}>
+                  {["#","Color · Doc","Descripción"].map(h=>(
+                    <th key={h} style={{ padding:"6px 8px", textAlign:"left", fontSize:7.5, color:TEXT2, letterSpacing:".1em", textTransform:"uppercase", background:"rgba(200,169,110,.06)", fontWeight:400 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {activeLayers.map((l,i)=>(
+                  <LayerRow key={i} layer={l} layerIndex={i} onCopy={copyVal} copied={copied}
+                    hasNote={(layerNotes[i]||"").trim().length>0}
+                    onOpenNote={setActiveNoteLayer} />
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {/* Acciones */}
