@@ -279,7 +279,12 @@ const LayerDocModal = memo(({ layer, layerIndex, initialNote, onSave, onClose })
 
   const startRec = async () => {
     if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
-      setMicError("Dictado no disponible en este navegador. Usa Chrome o Safari.");
+      setMicError("Dictado no disponible en este navegador. Usa Safari.");
+      return;
+    }
+    // Chrome en iOS usa WKWebView: la API existe pero Apple la bloquea
+    if (/CriOS/.test(navigator.userAgent)) {
+      setMicError("En iPhone el dictado solo funciona en Safari — abre esta página en Safari para usar esta función.");
       return;
     }
     setMicError(null);
