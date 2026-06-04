@@ -23,16 +23,31 @@
         line-height: 1.8; margin-top: 8px; display: none;
       }
     </style>
-    <!-- Captura errores JS antes de que React monte -->
     <script>
+      // Capture phase — catches script/resource 404 errors that don't bubble
       window.addEventListener('error', function(e) {
         var el = document.getElementById('splash-err');
-        if (el) { el.style.display = 'block'; el.textContent = e.message + ' (' + (e.filename||'').split('/').pop() + ':' + e.lineno + ')'; }
-      });
+        if (!el) return;
+        el.style.display = 'block';
+        if (e.target && (e.target.src || e.target.href)) {
+          el.textContent = 'No cargó: ' + (e.target.src || e.target.href).split('/').pop();
+        } else {
+          el.textContent = (e.message || 'Error') + ' (' + (e.filename||'').split('/').pop() + ':' + e.lineno + ')';
+        }
+      }, true);
       window.addEventListener('unhandledrejection', function(e) {
         var el = document.getElementById('splash-err');
         if (el) { el.style.display = 'block'; el.textContent = String(e.reason?.message || e.reason || 'Promise rejected'); }
       });
+      // Timeout: si en 8s React no montó, muestra qué pasó
+      setTimeout(function() {
+        var root = document.getElementById('root');
+        var err  = document.getElementById('splash-err');
+        if (root && !root.firstChild && err && err.style.display === 'none') {
+          err.style.display = 'block';
+          err.textContent = 'Timeout: app.js no ejecutó en 8s';
+        }
+      }, 8000);
     </script>
   </head>
   <body>
