@@ -39,7 +39,6 @@
         var el = document.getElementById('splash-err');
         if (el) { el.style.display = 'block'; el.textContent = String(e.reason?.message || e.reason || 'Promise rejected'); }
       });
-      // Timeout: si en 8s React no montó, muestra qué pasó
       setTimeout(function() {
         var root = document.getElementById('root');
         var err  = document.getElementById('splash-err');
@@ -61,6 +60,7 @@
       </div>
       <div id="splash-err"></div>
     </div>
-    <script type="module" src="/src/main.jsx"></script>
+    <!-- Built by Vite: src/main.jsx → /stratachroma/assets/app.js -->
+    <script type="module" src="/stratachroma/assets/app.js"></script>
   </body>
 </html>
